@@ -16,6 +16,11 @@ type agencyRecord struct {
 	Raw  ecfr.Agency
 }
 
+type titleKey struct {
+	Title int
+	Date  string
+}
+
 func ComputeLatest(ctx context.Context, st *store.Store) error {
 	agencies, err := loadAgencies(ctx, st)
 	if err != nil {
@@ -30,11 +35,6 @@ func ComputeLatest(ctx context.Context, st *store.Store) error {
 	// Then roll-up to agency based on (title, chapter) references.
 	// Also compute "churn" vs previous snapshot date if present.
 
-	// Preload title chapters text for each title/date once
-	type titleKey struct {
-		Title int
-		Date  string
-	}
 	titleChapterText := map[titleKey]map[string]string{}
 
 	for _, t := range titles {
@@ -114,10 +114,13 @@ func ComputeLatest(ctx context.Context, st *store.Store) error {
 	return nil
 }
 
-func computeChurnBestEffort(ctx context.Context, st *store.Store, a agencyRecord, titles []ecfr.Title, current map[struct {
-	Title int
-	Date  string
-}]map[string]string) float64 {
+func computeChurnBestEffort(
+	ctx context.Context,
+	st *store.Store,
+	a agencyRecord,
+	titles []ecfr.Title,
+	current map[titleKey]map[string]string,
+) float64 {
 	// Best effort: look up prior issue_date in snapshots table for each referenced title,
 	// compute checksum per referenced chapter and compare.
 	// If we can’t find a prior snapshot, churn = 0 for that title.
