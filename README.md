@@ -1,4 +1,4 @@
-# eCFRProject
+# eCFR Project
 
 ### Overall goal:
 To create a simple website to analyze Federal Regulations to allow for more digestable and actionable insights to be made on potential deregulation efforts across the government.
