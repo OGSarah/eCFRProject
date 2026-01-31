@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -133,23 +134,48 @@ func (s *Store) SnapshotExists(ctx context.Context, title int, date string) (boo
 }
 
 func (s *Store) SaveSnapshot(ctx context.Context, title int, date string, xmlBytes []byte) error {
-	fn := fmt.Sprintf("title-%d_%s.xml.gz", title, date)
-	path := filepath.Join(s.dataDir, "xml", fn)
+	return s.SaveSnapshotFromReader(ctx, title, date, bytes.NewReader(xmlBytes))
+}
 
-	// write gzip file
-	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
-	if _, err := gz.Write(xmlBytes); err != nil {
+func (s *Store) SaveSnapshotFromReader(ctx context.Context, title int, date string, r io.Reader) error {
+	fn := fmt.Sprintf("title-%d_%s.xml.gz", title, date)
+	dir := filepath.Join(s.dataDir, "xml")
+	path := filepath.Join(dir, fn)
+
+	tmp, err := os.CreateTemp(dir, fn+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+	}()
+
+	gz := gzip.NewWriter(tmp)
+	const maxXMLSize = 300 << 20 // 300MB safety limit on source XML
+	n, err := io.Copy(gz, io.LimitReader(r, maxXMLSize+1))
+	if err == nil && n > maxXMLSize {
+		err = fmt.Errorf("snapshot too large")
+	}
+	if err != nil {
+		_ = gz.Close()
 		return err
 	}
 	if err := gz.Close(); err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	if err := os.Chmod(path, 0o644); err != nil {
 		return err
 	}
 
-	_, err := s.db.ExecContext(ctx, `
+	_, err = s.db.ExecContext(ctx, `
 INSERT INTO snapshots(title_number, issue_date, file_path, created_at)
 VALUES(?,?,?,?)
 `, title, date, path, time.Now().Format(time.RFC3339))

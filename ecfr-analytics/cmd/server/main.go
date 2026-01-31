@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -144,26 +146,54 @@ func main() {
 }
 
 func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map[string]any, error) {
-	// 1) Pull agencies metadata, store it
-	agencies, err := cli.GetAgencies(ctx)
-	if err != nil {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// 1) Pull agencies + titles concurrently and store them
+	var agencies []ecfr.Agency
+	var titles []ecfr.Title
+	errCh := make(chan error, 2)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		a, err := cli.GetAgencies(ctx)
+		if err == nil {
+			err = st.UpsertAgencies(ctx, a)
+		}
+		if err != nil {
+			errCh <- err
+			cancel()
+			return
+		}
+		agencies = a
+	}()
+	go func() {
+		defer wg.Done()
+		t, err := cli.GetTitles(ctx)
+		if err == nil {
+			err = st.UpsertTitles(ctx, t)
+		}
+		if err != nil {
+			errCh <- err
+			cancel()
+			return
+		}
+		titles = t
+	}()
+	wg.Wait()
+	select {
+	case err := <-errCh:
 		return nil, err
-	}
-	if err := st.UpsertAgencies(ctx, agencies); err != nil {
-		return nil, err
+	default:
 	}
 
-	// 2) Pull titles list, choose each title's up_to_date_as_of (current “snapshot date”)
-	titles, err := cli.GetTitles(ctx)
-	if err != nil {
-		return nil, err
+	// 2) For each title, download full XML and store as gzip file (if not already)
+	type job struct {
+		title int
+		date  string
 	}
-	if err := st.UpsertTitles(ctx, titles); err != nil {
-		return nil, err
-	}
-
-	// 3) For each title, download full XML and store as gzip file (if not already)
-	downloaded := 0
+	jobs := make([]job, 0, len(titles))
 	for _, t := range titles {
 		if t.Reserved {
 			continue
@@ -176,14 +206,66 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 		if exists {
 			continue
 		}
-		xmlBytes, err := cli.GetFullTitleXML(ctx, date, t.Number)
-		if err != nil {
-			return nil, err
+		jobs = append(jobs, job{title: t.Number, date: date})
+	}
+
+	workers := getenvInt("ECFR_DOWNLOAD_CONCURRENCY", 4)
+	if workers < 1 {
+		workers = 1
+	}
+	if workers > 16 {
+		workers = 16
+	}
+
+	jobCh := make(chan job)
+	errCh = make(chan error, workers)
+	var downloaded int64
+	wg = sync.WaitGroup{}
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range jobCh {
+				if ctx.Err() != nil {
+					return
+				}
+				rc, err := cli.GetFullTitleXMLStream(ctx, j.date, j.title)
+				if err != nil {
+					select {
+					case errCh <- err:
+					default:
+					}
+					cancel()
+					return
+				}
+				err = st.SaveSnapshotFromReader(ctx, j.title, j.date, rc)
+				_ = rc.Close()
+				if err != nil {
+					select {
+					case errCh <- err:
+					default:
+					}
+					cancel()
+					return
+				}
+				atomic.AddInt64(&downloaded, 1)
+			}
+		}()
+	}
+sendLoop:
+	for _, j := range jobs {
+		select {
+		case <-ctx.Done():
+			break sendLoop
+		case jobCh <- j:
 		}
-		if err := st.SaveSnapshot(ctx, t.Number, date, xmlBytes); err != nil {
-			return nil, err
-		}
-		downloaded++
+	}
+	close(jobCh)
+	wg.Wait()
+	select {
+	case err := <-errCh:
+		return nil, err
+	default:
 	}
 
 	// 4) Compute metrics for the newest snapshot date per title, rolled up to agencies
@@ -194,7 +276,7 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 	return map[string]any{
 		"agencies":    len(agencies),
 		"titles":      len(titles),
-		"downloaded":  downloaded,
+		"downloaded":  int(atomic.LoadInt64(&downloaded)),
 		"computed_at": time.Now().Format(time.RFC3339),
 	}, nil
 }
@@ -202,6 +284,15 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 func getenv(k, def string) string {
 	if v := os.Getenv(k); v != "" {
 		return v
+	}
+	return def
+}
+
+func getenvInt(k string, def int) int {
+	if v := os.Getenv(k); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
 	}
 	return def
 }
