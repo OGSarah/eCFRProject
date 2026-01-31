@@ -35,5 +35,5 @@ go build ./cmd/server
 go run ./cmd/server
 ```
 
-### Important features I added
+### Important features I added:
 - Dark mode/Light mode is set on the website according to system settings.
