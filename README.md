@@ -45,13 +45,6 @@ By default it listens on `http://localhost:8080`.
 - The initial download can take several minutes depending on network speed.
 - Data is stored under `ecfr-analytics/data`.
 
-### Useful Endpoints
-- `GET /api/health`
-- `POST /api/refresh`
-- `GET /api/agencies`
-- `GET /api/metrics/latest?metric=word_count|words_per_chapter|checksum|churn|readability`
-- `GET /api/state?key=last_refresh`
-
 ## Screenshots
 <img src="screenshots/darkMode.png" alt="Dark Mode" width="900"
 <img src="screenshots/lightMode.png" alt="Light Mode" width="900"
@@ -60,5 +53,5 @@ By default it listens on `http://localhost:8080`.
 ## Feedback
 - Expertise/skill fit: My background spans Go backends, REST/HTTP APIs, data processing, and security-focused delivery, alongside years of building user-facing products. This project aligns with my experience designing services, storing and analyzing data, and presenting it in clear UIs. I’ve shipped and maintained production systems, built automation and tests, and worked across Swift, Java, JavaScript, and Go—skills that map directly to delivering a clean, end-to-end analytics app.
 - Duration: 8 hrs
-- I added more than the required number of code lines, I tried to limit it but I wanted the project to look polished.
-- I also wanted to add code comments since its pretty common to do in Go but I didn't want to add even more lines of code over the required number.
+- I added more than the required number of lines of code. I tried to limit it, but I wanted the project to look polished. 
+- I wanted to add code comments, since it’s pretty common to do so in Go, but I didn’t want to increase the line count even further beyond the requirement.
