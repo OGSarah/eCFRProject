@@ -13,6 +13,8 @@ let topChart = null;
 let tsChart = null;
 
 const numberFmt = new Intl.NumberFormat("en-US");
+const themeKey = "ecfr-theme";
+const themeQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
 async function jget(path) {
   const res = await fetch(API(path));
@@ -136,14 +138,27 @@ function chartColor(metric) {
     case "words_per_chapter":
       return "#1c6e8c";
     default:
-      return "#0f1b2d";
+      return cssVar("--ink") || "#0f1b2d";
   }
+}
+
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function chartGridColor() {
+  return cssVar("--chart-grid") || "rgba(15, 27, 45, 0.08)";
+}
+
+function chartFill() {
+  return cssVar("--chart-fill") || "rgba(28, 110, 140, 0.15)";
 }
 
 async function renderTopChart() {
   const metric = document.getElementById("topMetricSelect").value;
   const rows = await loadLatest(metric);
   const top = topN(rows, 12);
+  const gridColor = chartGridColor();
 
   setText("topChartTitle", `Top agencies by ${metricLabels[metric] ?? metric}`);
 
@@ -162,6 +177,7 @@ async function renderTopChart() {
       plugins: { legend: { display: false } },
       scales: {
         y: {
+          grid: { color: gridColor },
           ticks: {
             callback: (val) => {
               if (metric === "churn") return `${(val * 100).toFixed(0)}%`;
@@ -169,7 +185,10 @@ async function renderTopChart() {
             },
           },
         },
-        x: { ticks: { autoSkip: false, maxRotation: 40, minRotation: 20 } },
+        x: {
+          grid: { color: gridColor },
+          ticks: { autoSkip: false, maxRotation: 40, minRotation: 20 },
+        },
       },
     },
   };
@@ -189,6 +208,7 @@ async function loadTimeseries() {
     `/api/metrics/agency/${encodeURIComponent(slug)}/timeseries?metric=${encodeURIComponent(metric)}&days=${encodeURIComponent(days)}`
   );
   const data = [...rows].reverse();
+  const gridColor = chartGridColor();
 
   const cfg = {
     type: "line",
@@ -198,7 +218,7 @@ async function loadTimeseries() {
         label: metricLabels[metric] ?? metric,
         data: data.map((r) => r.value),
         borderColor: chartColor(metric),
-        backgroundColor: "rgba(28, 110, 140, 0.15)",
+        backgroundColor: chartFill(),
         fill: true,
         tension: 0.3,
       }],
@@ -206,6 +226,10 @@ async function loadTimeseries() {
     options: {
       responsive: true,
       plugins: { legend: { display: true } },
+      scales: {
+        y: { grid: { color: gridColor } },
+        x: { grid: { color: gridColor } },
+      },
     },
   };
 
@@ -306,6 +330,46 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;");
 }
 
+function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme) {
+    root.setAttribute("data-theme", theme);
+  } else {
+    root.removeAttribute("data-theme");
+  }
+
+  const toggle = document.getElementById("themeToggle");
+  if (toggle) {
+    const isDark = root.getAttribute("data-theme") === "dark";
+    toggle.textContent = isDark ? "Light mode" : "Dark mode";
+    toggle.setAttribute("aria-pressed", String(isDark));
+  }
+
+  Chart.defaults.color = cssVar("--ink") || "#0f1b2d";
+  Chart.defaults.borderColor = chartGridColor();
+  Chart.defaults.font.family = '"IBM Plex Sans", "Helvetica Neue", Arial, sans-serif';
+}
+
+function loadThemePreference() {
+  const stored = localStorage.getItem(themeKey);
+  if (stored === "light" || stored === "dark") return stored;
+  return themeQuery.matches ? "dark" : "light";
+}
+
+function setThemePreference(theme) {
+  localStorage.setItem(themeKey, theme);
+  applyTheme(theme);
+  renderTopChart();
+  loadTimeseries();
+}
+
+function syncThemeFromSystem() {
+  if (localStorage.getItem(themeKey)) return;
+  applyTheme(themeQuery.matches ? "dark" : "light");
+  renderTopChart();
+  loadTimeseries();
+}
+
 document.getElementById("refreshBtn").addEventListener("click", refresh);
 document.getElementById("exportCsvBtn").addEventListener("click", exportCsv);
 document.getElementById("topMetricSelect").addEventListener("change", renderTopChart);
@@ -314,10 +378,14 @@ document.getElementById("reviewSearch").addEventListener("input", loadReviewTabl
 document.getElementById("agencySelect").addEventListener("change", loadTimeseries);
 document.getElementById("metricSelect").addEventListener("change", loadTimeseries);
 document.getElementById("daysSelect").addEventListener("change", loadTimeseries);
+document.getElementById("themeToggle").addEventListener("click", () => {
+  const current = document.documentElement.getAttribute("data-theme");
+  setThemePreference(current === "dark" ? "light" : "dark");
+});
 
 (async function init() {
-  Chart.defaults.color = "#0f1b2d";
-  Chart.defaults.font.family = '"IBM Plex Sans", "Helvetica Neue", Arial, sans-serif';
+  applyTheme(loadThemePreference());
+  themeQuery.addEventListener("change", syncThemeFromSystem);
 
   await loadAgencies();
   await loadAllLatest();

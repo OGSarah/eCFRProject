@@ -16,11 +16,37 @@
         --ink-muted: #546070;
         --surface: #f8f4ef;
         --panel: #ffffff;
+        --panel-soft: #f2ede6;
         --accent: #1c6e8c;
         --accent-2: #f1b24a;
         --accent-3: #3d9a7b;
         --stroke: #e4dcd3;
+        --table-line: #eee2d7;
         --shadow: 0 20px 45px rgba(15, 27, 45, 0.12);
+        --bg-start: #fffaf2;
+        --bg-mid: #f6efe6;
+        --bg-end: #f3ece4;
+        --chart-grid: rgba(15, 27, 45, 0.08);
+        --chart-fill: rgba(28, 110, 140, 0.15);
+      }
+
+      :root[data-theme="dark"] {
+        --ink: #edf2f7;
+        --ink-muted: #b3c0d1;
+        --surface: #0f141c;
+        --panel: #151c26;
+        --panel-soft: #1b2430;
+        --accent: #69b6d1;
+        --accent-2: #f1b24a;
+        --accent-3: #54c29b;
+        --stroke: #2b3848;
+        --table-line: #243140;
+        --shadow: 0 28px 60px rgba(2, 6, 12, 0.5);
+        --bg-start: #0b1118;
+        --bg-mid: #0e1620;
+        --bg-end: #0f141c;
+        --chart-grid: rgba(237, 242, 247, 0.12);
+        --chart-fill: rgba(105, 182, 209, 0.2);
       }
 
       * { box-sizing: border-box; }
@@ -28,7 +54,7 @@
         margin: 0;
         font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
         color: var(--ink);
-        background: radial-gradient(circle at 10% 20%, #fffaf2 0%, #f6efe6 35%, #f3ece4 100%);
+        background: radial-gradient(circle at 10% 20%, var(--bg-start) 0%, var(--bg-mid) 35%, var(--bg-end) 100%);
         min-height: 100vh;
       }
 
@@ -43,8 +69,8 @@
         gap: 24px;
         grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
         align-items: center;
-        background: linear-gradient(135deg, rgba(28, 110, 140, 0.08), rgba(241, 178, 74, 0.12));
-        border: 1px solid rgba(28, 110, 140, 0.15);
+        background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, transparent), color-mix(in srgb, var(--accent-2) 16%, transparent));
+        border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
         border-radius: 24px;
         padding: 28px 30px;
         box-shadow: var(--shadow);
@@ -59,7 +85,7 @@
         top: -80px;
         width: 220px;
         height: 220px;
-        background: radial-gradient(circle, rgba(61, 154, 123, 0.3), transparent 70%);
+        background: radial-gradient(circle, color-mix(in srgb, var(--accent-3) 45%, transparent), transparent 70%);
         border-radius: 50%;
         filter: blur(2px);
       }
@@ -104,6 +130,12 @@
       .btn-secondary {
         background: transparent;
         color: var(--accent);
+      }
+
+      .btn-toggle {
+        border-style: dashed;
+        background: var(--panel);
+        color: var(--ink);
       }
 
       .subtle {
@@ -166,7 +198,8 @@
         padding: 10px 12px;
         border-radius: 12px;
         border: 1px solid var(--stroke);
-        background: #fff;
+        background: var(--panel);
+        color: var(--ink);
         font-size: 14px;
       }
 
@@ -179,7 +212,7 @@
       th, td {
         text-align: left;
         padding: 10px 8px;
-        border-bottom: 1px solid #eee2d7;
+        border-bottom: 1px solid var(--table-line);
       }
 
       th {
@@ -190,7 +223,7 @@
       }
 
       code {
-        background: #f2ede6;
+        background: var(--panel-soft);
         padding: 2px 6px;
         border-radius: 6px;
         font-size: 12px;
@@ -202,7 +235,7 @@
         gap: 6px;
         padding: 6px 10px;
         border-radius: 999px;
-        background: #f2ede6;
+        background: var(--panel-soft);
         color: var(--ink-muted);
         font-size: 12px;
       }
@@ -240,6 +273,7 @@
           <div class="controls">
             <button class="btn" id="refreshBtn">Refresh eCFR snapshots</button>
             <button class="btn btn-secondary" id="exportCsvBtn">Export CSV</button>
+            <button class="btn btn-toggle" id="themeToggle" type="button" aria-pressed="false">Dark mode</button>
             <span class="pill" id="refreshState">Awaiting refresh</span>
           </div>
           <div class="subtle" id="refreshOut"></div>
