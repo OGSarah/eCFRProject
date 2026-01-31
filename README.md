@@ -35,5 +35,11 @@ go build ./cmd/server
 go run ./cmd/server
 ```
 
+### Open a browswer and paste the following:
+
+`http://localhost:8080`
+
+Then click on "Download current snapshots + recompute metrics""
+
 ### Important features I added:
 - Dark mode/Light mode is set on the website according to system settings.
