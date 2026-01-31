@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>eCFR Insight Studio</title>
+    <title>Federal Regulations Insights</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -72,7 +72,7 @@
         background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, transparent), color-mix(in srgb, var(--accent-2) 16%, transparent));
         border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
         border-radius: 24px;
-        padding: 28px 30px;
+        padding: 18px 30px 28px;
         box-shadow: var(--shadow);
         position: relative;
         overflow: hidden;
@@ -93,9 +93,11 @@
       .kicker {
         text-transform: uppercase;
         letter-spacing: 0.2em;
-        font-size: 11px;
+        font-size: 12px;
         color: var(--accent);
         font-weight: 600;
+        margin-top: -100px;
+        margin-bottom: 20px;
       }
 
       h1, h2, h3 {
@@ -103,7 +105,7 @@
         margin: 0;
       }
 
-      h1 { font-size: clamp(28px, 4vw, 42px); }
+      h1 { font-size: clamp(28px, 4vw, 42px); margin-bottom: 18px; }
       h2 { font-size: 22px; }
       h3 { font-size: 18px; }
 
@@ -243,6 +245,31 @@
         font-size: 12px;
       }
 
+      .chart-card {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-height: 320px;
+      }
+
+      .chart-card canvas {
+        width: 100% !important;
+        height: 260px !important;
+      }
+
+      footer {
+        margin-top: 60px;
+        padding-top: 16px;
+        border-top: 1px solid var(--stroke);
+        color: var(--ink-muted);
+        font-size: 14px;
+      }
+
+      footer a {
+        color: var(--ink);
+        font-weight: 600;
+      }
+
       .fade-in {
         opacity: 0;
         transform: translateY(10px);
@@ -348,11 +375,11 @@
           </div>
         </div>
         <div class="grid grid-2">
-          <div class="card">
+          <div class="card chart-card">
             <h3 id="topChartTitle">Top agencies by word count</h3>
             <canvas id="topChart"></canvas>
           </div>
-          <div class="card">
+          <div class="card chart-card">
             <h3>Agency trendline</h3>
             <div class="controls trendline-controls">
               <select id="agencySelect"></select>
@@ -423,6 +450,10 @@
         </div>
       </section>
     </div>
+
+    <footer class="page">
+      <div>Source: <a href="https://www.ecfr.gov/" target="_blank" rel="noopener">ecfr.gov</a></div>
+    </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="app.js"></script>
