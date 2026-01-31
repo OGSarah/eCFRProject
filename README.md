@@ -46,8 +46,16 @@ By default it listens on `http://localhost:8080`.
 - Data is stored under `ecfr-analytics/data`.
 
 ## Screenshots
-<img src="screenshots/darkMode.png" alt="Dark Mode" width="900"
-<img src="screenshots/lightMode.png" alt="Light Mode" width="900"
+
+## Screenshots
+
+## Screenshots
+
+| Dark Mode | Light Mode |
+|----------|------------|
+| <img src="screenshots/darkMode.png" width="450"/> | <img src="screenshots/lightMode.png" width="450"/> |
+
+
 
 
 ## Feedback
