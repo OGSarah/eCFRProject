@@ -30,7 +30,6 @@ type serverDeps struct {
 	getState      func(ctx context.Context, key string) (string, error)
 }
 
-// main configures the HTTP server, routes, and shared dependencies.
 func main() {
 	baseURL := getenv("ECFR_BASE_URL", "https://www.ecfr.gov")
 	dataDir := getenv("DATA_DIR", "./data")
@@ -73,7 +72,6 @@ func main() {
 		},
 	}
 
-	// Run startup refresh in the background so server startup isn't blocked.
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 		defer cancel()
@@ -84,7 +82,6 @@ func main() {
 		}
 	}()
 
-	// Daily refresh loop to pull new snapshots if available.
 	go func() {
 		for {
 			next := nextDailyRun(time.Now(), dailyHour)
@@ -99,7 +96,6 @@ func main() {
 		}
 	}()
 
-	// Static UI
 	mux := newMux("./web", deps)
 
 	log.Printf("Server started")
@@ -116,12 +112,10 @@ func newMux(webDir string, deps serverDeps) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.Dir(webDir)))
 
-	// Health
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "time": time.Now().Format(time.RFC3339)})
 	})
 
-	// Download/refresh current snapshot (manual trigger)
 	mux.HandleFunc("/api/refresh", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "POST required", http.StatusMethodNotAllowed)
@@ -138,7 +132,6 @@ func newMux(webDir string, deps serverDeps) *http.ServeMux {
 		writeJSON(w, http.StatusOK, result)
 	})
 
-	// List agencies (from stored admin feed)
 	mux.HandleFunc("/api/agencies", func(w http.ResponseWriter, r *http.Request) {
 		ag, err := deps.listAgencies(r.Context())
 		if err != nil {
@@ -148,8 +141,6 @@ func newMux(webDir string, deps serverDeps) *http.ServeMux {
 		writeJSON(w, http.StatusOK, ag)
 	})
 
-	// Latest metrics for all agencies
-	// /api/metrics/latest?metric=word_count|words_per_chapter|checksum|churn|readability
 	mux.HandleFunc("/api/metrics/latest", func(w http.ResponseWriter, r *http.Request) {
 		metric := r.URL.Query().Get("metric")
 		if metric == "" {
@@ -163,8 +154,6 @@ func newMux(webDir string, deps serverDeps) *http.ServeMux {
 		writeJSON(w, http.StatusOK, rows)
 	})
 
-	// App state lookup
-	// /api/state?key=last_refresh
 	mux.HandleFunc("/api/state", func(w http.ResponseWriter, r *http.Request) {
 		key := r.URL.Query().Get("key")
 		if key == "" {
@@ -182,13 +171,11 @@ func newMux(webDir string, deps serverDeps) *http.ServeMux {
 	return mux
 }
 
-// refreshCurrent downloads latest datasets, stores snapshots, and recomputes metrics.
 func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map[string]any, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	log.Printf("ECFR INGEST: starting download check")
-	// 1) Pull agencies + titles concurrently and store them
 	var agencies []ecfr.Agency
 	var titles []ecfr.Title
 	errCh := make(chan error, 2)
@@ -227,7 +214,6 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 	default:
 	}
 
-	// 2) For each title, download full XML and store as gzip file (if not already)
 	type job struct {
 		title int
 		date  string
@@ -322,7 +308,6 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 		}
 	}
 
-	// 4) Compute metrics for the newest snapshot date per title, rolled up to agencies.
 	if err := metrics.ComputeLatest(ctx, st); err != nil {
 		return nil, err
 	}
@@ -341,7 +326,6 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 	}, nil
 }
 
-// nextDailyRun returns the next time at the given local hour.
 func nextDailyRun(now time.Time, hour int) time.Time {
 	if hour < 0 || hour > 23 {
 		hour = 2
@@ -353,7 +337,6 @@ func nextDailyRun(now time.Time, hour int) time.Time {
 	return next
 }
 
-// getenv returns the environment variable or a default.
 func getenv(k, def string) string {
 	if v := os.Getenv(k); v != "" {
 		return v
@@ -361,7 +344,6 @@ func getenv(k, def string) string {
 	return def
 }
 
-// getenvInt returns an int environment variable or a default.
 func getenvInt(k string, def int) int {
 	if v := os.Getenv(k); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
@@ -371,14 +353,12 @@ func getenvInt(k string, def int) int {
 	return def
 }
 
-// writeJSON encodes the response as JSON with status code.
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// withCORS adds permissive CORS headers for the API.
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -392,7 +372,6 @@ func withCORS(next http.Handler) http.Handler {
 	})
 }
 
-// isRetryableDownloadErr identifies transient download errors worth retrying.
 func isRetryableDownloadErr(err error) bool {
 	if err == nil {
 		return false
