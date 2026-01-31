@@ -58,7 +58,7 @@ By default it listens on `http://localhost:8080`.
 
 
 ## Feedback
-- Expertise/skill fit: I have worked on the backend side of things and also with javascripta bunch.
+- Expertise/skill fit: My background spans Go backends, REST/HTTP APIs, data processing, and security-focused delivery, alongside years of building user-facing products. This project aligns with my experience designing services, storing and analyzing data, and presenting it in clear UIs. I’ve shipped and maintained production systems, built automation and tests, and worked across Swift, Java, JavaScript, and Go—skills that map directly to delivering a clean, end-to-end analytics app.
 - Duration: 8 hrs
 - I added more than the required number of code lines, I tried to limit it but I wanted the project to look polished.
 - I also wanted to add code comments since its pretty common to do in Go but I didn't want to add even more lines of code over the required number.
