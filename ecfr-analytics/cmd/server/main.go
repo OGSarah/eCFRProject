@@ -46,6 +46,21 @@ func main() {
 
 	cli := ecfr.NewClient(baseURL, 120*time.Second)
 
+	// Run startup refresh in the background so server startup isn't blocked.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		defer cancel()
+		if _, err := refreshCurrent(ctx, cli, st); err != nil {
+			log.Printf("startup refresh failed: %v", err)
+			return
+		}
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel2()
+		if err := metrics.ComputeLatest(ctx2, st); err != nil {
+			log.Printf("startup metrics compute failed: %v", err)
+		}
+	}()
+
 	// Static UI
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.Dir("./web")))
@@ -80,21 +95,6 @@ func main() {
 			return
 		}
 		writeJSON(w, http.StatusOK, ag)
-	})
-
-	// Insights: outlier chapters for a selected agency.
-	mux.HandleFunc("/api/insights/outliers", func(w http.ResponseWriter, r *http.Request) {
-		slug := r.URL.Query().Get("slug")
-		if slug == "" {
-			http.Error(w, "slug required", http.StatusBadRequest)
-			return
-		}
-		outliers, err := metrics.OutlierChaptersByAgency(r.Context(), st, slug, 5)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		writeJSON(w, http.StatusOK, outliers)
 	})
 
 	// Insights: growth hotspots for a window.
@@ -183,6 +183,7 @@ func main() {
 		}
 	})
 
+	log.Printf("Server started")
 	log.Printf("Listening on %s", addr)
 	srv := &http.Server{
 		Addr:              addr,
@@ -197,6 +198,7 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	log.Printf("ECFR INGEST: starting download check")
 	// 1) Pull agencies + titles concurrently and store them
 	var agencies []ecfr.Agency
 	var titles []ecfr.Title
@@ -251,10 +253,20 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 		if err != nil {
 			return nil, err
 		}
-		if exists {
-			continue
+		if !exists {
+			jobs = append(jobs, job{title: t.Number, date: date})
 		}
-		jobs = append(jobs, job{title: t.Number, date: date})
+
+		// Backfill: download the snapshot from exactly 365 days prior.
+		if prior := dateMinusDays(date, 365); prior != "" {
+			existsPrior, err := st.SnapshotExists(ctx, t.Number, prior)
+			if err != nil {
+				return nil, err
+			}
+			if !existsPrior {
+				jobs = append(jobs, job{title: t.Number, date: prior})
+			}
+		}
 	}
 
 	workers := getenvInt("ECFR_DOWNLOAD_CONCURRENCY", 2)
@@ -265,6 +277,7 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 		workers = 8
 	}
 
+	log.Printf("ECFR INGEST: downloading snapshots (%d jobs, %d workers)", len(jobs), workers)
 	jobCh := make(chan job)
 	errCh = make(chan error, workers)
 	var downloaded int64
@@ -304,12 +317,8 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 					}
 				}
 				if lastErr != nil {
-					select {
-					case errCh <- lastErr:
-					default:
-					}
-					cancel()
-					return
+					log.Printf("ECFR INGEST: download failed (title=%d date=%s): %v; continuing", j.title, j.date, lastErr)
+					continue
 				}
 			}
 		}()
@@ -324,9 +333,10 @@ sendLoop:
 	}
 	close(jobCh)
 	wg.Wait()
+	log.Printf("ECFR INGEST: downloads complete (successfully downloaded=%d)", atomic.LoadInt64(&downloaded))
 	select {
 	case err := <-errCh:
-		return nil, err
+		log.Printf("ECFR INGEST: completed with download errors: %v", err)
 	default:
 	}
 
@@ -425,6 +435,14 @@ func isRetryableDownloadErr(err error) bool {
 		return true
 	}
 	return false
+}
+
+func dateMinusDays(ymd string, days int) string {
+	t, err := time.Parse("2006-01-02", ymd)
+	if err != nil {
+		return ""
+	}
+	return t.AddDate(0, 0, -days).Format("2006-01-02")
 }
 
 func indexOf(s, sub string) int {

@@ -136,11 +136,6 @@ async function updateSummary() {
   setText("statCoverage", numberFmt.format(wcRows.length));
 }
 
-async function loadStatus() {
-  const status = await jget("/api/status");
-  setText("lastRefresh", fmtDateTime(status.last_refresh));
-}
-
 function topN(rows, n = 12) {
   return [...rows]
     .filter((r) => typeof r.value === "number")
@@ -251,7 +246,11 @@ async function renderInsights() {
 
   const readList = document.getElementById("readabilityLow");
   if (readList) {
-    renderInsightList(readList, bottomN(readRows, 5), fmtScore);
+    const mostComplex = [...readRows]
+      .filter((r) => typeof r.value === "number")
+      .sort((a, b) => a.value - b.value)
+      .slice(0, 5);
+    renderInsightList(readList, mostComplex, fmtScore);
   }
 
   const densityList = document.getElementById("densityExtremes");
@@ -359,8 +358,6 @@ async function loadReviewTable() {
 }
 
 async function refresh() {
-  setText("refreshOut", "Running refresh. This can take several minutes...");
-  setText("refreshState", "Refreshing");
   try {
     const r = await jpost("/api/refresh");
     metricsCache.clear();
@@ -372,12 +369,7 @@ async function refresh() {
     await loadTimeseries();
     await loadReviewTable();
 
-    setText("lastRefresh", fmtDateTime(r.last_refresh || r.computed_at));
-    setText("refreshOut", `Updated ${r.computed_at} • ${r.downloaded} new snapshots`);
-    setText("refreshState", "Refresh complete");
   } catch (e) {
-    setText("refreshOut", String(e));
-    setText("refreshState", "Refresh failed");
   }
 }
 
@@ -442,7 +434,17 @@ function syncThemeFromSystem() {
   renderGrowthHotspots();
 }
 
-document.getElementById("refreshBtn").addEventListener("click", refresh);
+async function refreshFromServer() {
+  metricsCache.clear();
+  await loadAllLatest();
+  await updateSummary();
+  await renderInsights();
+  await renderGrowthHotspots();
+  await renderTopChart();
+  await loadReviewTable();
+  await loadTimeseries();
+}
+
 document.getElementById("exportCsvBtn").addEventListener("click", exportCsv);
 document.getElementById("topMetricSelect").addEventListener("change", renderTopChart);
 document.getElementById("reviewMetricSelect").addEventListener("change", loadReviewTable);
@@ -456,12 +458,8 @@ document.getElementById("daysSelect").addEventListener("change", loadTimeseries)
   themeQuery.addEventListener("change", syncThemeFromSystem);
 
   await loadAgencies();
-  await loadAllLatest();
-  await updateSummary();
-  await loadStatus();
-  await renderInsights();
-  await renderGrowthHotspots();
-  await renderTopChart();
-  await loadReviewTable();
-  await loadTimeseries();
+  await refreshFromServer();
+  setInterval(() => {
+    refreshFromServer().catch(() => {});
+  }, 300000);
 })();

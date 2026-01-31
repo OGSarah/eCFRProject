@@ -362,17 +362,14 @@
       <header class="hero fade-in">
         <div>
           <div class="kicker">Federal Regulations Analyzer</div>
-          <h1>Turn federal regulations into decision-ready signals.</h1>
+          <h1>View federal regulations as decision-ready signals.</h1>
           <p class="lead">
-            Download the latest eCFR snapshots, compute agency metrics, and explore
-            regulatory footprint, change, and complexity in one place.
+            Explore the latest stored eCFR snapshots, agency metrics, and regulatory
+            footprint, change, and complexity in one place.
           </p>
           <div class="controls">
-            <button class="btn" id="refreshBtn">Download eCFR snapshots</button>
             <button class="btn btn-secondary" id="exportCsvBtn">Export CSV</button>
           </div>
-          <div class="subtle">Last refresh: <span id="lastRefresh">--</span></div>
-          <div class="subtle" id="refreshOut"></div>
         </div>
         <div class="grid grid-2">
           <div class="card stat">
@@ -422,13 +419,14 @@
 
       <section class="section fade-in delay-2">
         <div class="section-header">
-          <h2>Latest movement + complexity</h2>
+          <h2>Regulatory complexity</h2>
         </div>
         <div class="grid grid-2">
           <div class="card">
             <ul class="insight-list" id="readabilityLow"></ul>
           </div>
         </div>
+        <div class="subtle" style="margin-top: 8px;">* Sorted by lowest readability first.</div>
       </section>
 
       <section class="section fade-in delay-2">
@@ -448,10 +446,10 @@
         </div>
         <div class="grid grid-2">
           <div class="card">
-            <div class="insight-meta">Largest increases over the last 365 days.</div>
             <ul class="insight-list" id="growthHotspots"></ul>
           </div>
         </div>
+        <div class="subtle" style="margin-top: 8px;">* Largest increases over the last 365 days.</div>
       </section>
 
       <section class="section fade-in delay-2">
