@@ -10,17 +10,20 @@ import (
 	"ecfr-analytics/internal/store"
 )
 
+// agencyRecord ties stored agency metadata to parsed CFR references.
 type agencyRecord struct {
 	Slug string
 	Name string
 	Raw  ecfr.Agency
 }
 
+// titleKey identifies a title and issue date pair.
 type titleKey struct {
 	Title int
 	Date  string
 }
 
+// ComputeLatest computes metrics for the newest snapshots and stores them.
 func ComputeLatest(ctx context.Context, st *store.Store) error {
 	agencies, err := loadAgencies(ctx, st)
 	if err != nil {
@@ -125,6 +128,7 @@ func ComputeLatest(ctx context.Context, st *store.Store) error {
 	return nil
 }
 
+// computeChurnBestEffort estimates churn using the nearest previous snapshots.
 func computeChurnBestEffort(
 	ctx context.Context,
 	st *store.Store,
@@ -205,6 +209,7 @@ func computeChurnBestEffort(
 
 // ---- helpers to read back stored agencies & titles ----
 
+// loadAgencies loads agencies from storage and flattens the tree.
 func loadAgencies(ctx context.Context, st *store.Store) ([]agencyRecord, error) {
 	rows, err := st.DB().QueryContext(ctx, `SELECT slug, name, json FROM agencies`)
 	if err != nil {
@@ -224,6 +229,7 @@ func loadAgencies(ctx context.Context, st *store.Store) ([]agencyRecord, error) 
 	return flattenAgencyTree(out), nil
 }
 
+// flattenAgencyTree walks nested agencies into a flat, de-duped slice.
 func flattenAgencyTree(in []agencyRecord) []agencyRecord {
 	// agencies.json contains nested children; we stored top-level json.
 	// We re-flatten by walking each Raw agency tree.
@@ -251,6 +257,7 @@ func flattenAgencyTree(in []agencyRecord) []agencyRecord {
 	return out
 }
 
+// loadTitles reads titles from storage.
 func loadTitles(ctx context.Context, st *store.Store) ([]ecfr.Title, error) {
 	rows, err := st.DB().QueryContext(ctx, `SELECT number, name, up_to_date_as_of, reserved FROM titles`)
 	if err != nil {
@@ -270,6 +277,7 @@ func loadTitles(ctx context.Context, st *store.Store) ([]ecfr.Title, error) {
 	return out, nil
 }
 
+// findTitleDate returns the current issue date for a title number.
 func findTitleDate(titles []ecfr.Title, number int) (string, bool) {
 	for _, t := range titles {
 		if t.Number == number {
@@ -279,6 +287,7 @@ func findTitleDate(titles []ecfr.Title, number int) (string, bool) {
 	return "", false
 }
 
+// newestReferencedDate finds the newest issue date referenced by an agency.
 func newestReferencedDate(a agencyRecord, titles []ecfr.Title) string {
 	best := ""
 	for _, r := range a.Raw.CFRReferences {
@@ -291,6 +300,7 @@ func newestReferencedDate(a agencyRecord, titles []ecfr.Title) string {
 	return best
 }
 
+// uniqueStrings removes duplicates while preserving first-seen order.
 func uniqueStrings(in []string) []string {
 	seen := map[string]bool{}
 	out := make([]string, 0, len(in))
@@ -303,6 +313,7 @@ func uniqueStrings(in []string) []string {
 	return out
 }
 
+// refKey builds a stable key for a title/chapter pair.
 func refKey(title int, chapter string) string {
 	return fmt.Sprintf("%d:%s", title, chapter)
 }

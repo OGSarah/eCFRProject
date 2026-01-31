@@ -1,5 +1,6 @@
 package ecfr
 
+// Title models a CFR title from the versioner API.
 type Title struct {
 	Number       int    `json:"number"`
 	Name         string `json:"name"`
@@ -7,6 +8,7 @@ type Title struct {
 	Reserved     bool   `json:"reserved"`
 }
 
+// Agency models an agency entry from the admin API.
 type Agency struct {
 	Name          string        `json:"name"`
 	Slug          string        `json:"slug"`
@@ -16,6 +18,7 @@ type Agency struct {
 	ShortName     string        `json:"short_name"`
 }
 
+// CFRRef points to a referenced title/chapter for an agency.
 type CFRRef struct {
 	Title   int    `json:"title"`
 	Chapter string `json:"chapter,omitempty"`  // e.g., "I"

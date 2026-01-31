@@ -11,11 +11,13 @@ import (
 	"time"
 )
 
+// Client is a struct that wraps HTTP access to the eCFR API.
 type Client struct {
 	base string
 	hc   *http.Client
 }
 
+// NewClient constructs a client with a base URL and request timeout.
 func NewClient(base string, timeout time.Duration) *Client {
 	tr := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
@@ -32,7 +34,7 @@ func NewClient(base string, timeout time.Duration) *Client {
 	}
 }
 
-// Titles endpoint is part of the Versioner service (JSON list of titles). :contentReference[oaicite:3]{index=3}
+// GetTitles fetches the list of titles from the versioner endpoint.
 func (c *Client) GetTitles(ctx context.Context) ([]Title, error) {
 	u := c.base + "/api/versioner/v1/titles.json"
 	var resp struct {
@@ -44,7 +46,7 @@ func (c *Client) GetTitles(ctx context.Context) ([]Title, error) {
 	return resp.Titles, nil
 }
 
-// Agencies admin feed. :contentReference[oaicite:4]{index=4}
+// GetAgencies fetches the agencies list from the admin endpoint.
 func (c *Client) GetAgencies(ctx context.Context) ([]Agency, error) {
 	u := c.base + "/api/admin/v1/agencies.json"
 	var resp struct {
@@ -56,7 +58,7 @@ func (c *Client) GetAgencies(ctx context.Context) ([]Agency, error) {
 	return resp.Agencies, nil
 }
 
-// Full-title XML. :contentReference[oaicite:5]{index=5}
+// GetFullTitleXML downloads a full-title XML document into memory.
 func (c *Client) GetFullTitleXML(ctx context.Context, date string, title int) ([]byte, error) {
 	u := fmt.Sprintf("%s/api/versioner/v1/full/%s/title-%d.xml", c.base, url.PathEscape(date), title)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
@@ -73,6 +75,7 @@ func (c *Client) GetFullTitleXML(ctx context.Context, date string, title int) ([
 	return io.ReadAll(res.Body)
 }
 
+// GetFullTitleXMLStream streams a full-title XML document without buffering it all in memory.
 func (c *Client) GetFullTitleXMLStream(ctx context.Context, date string, title int) (io.ReadCloser, error) {
 	u := fmt.Sprintf("%s/api/versioner/v1/full/%s/title-%d.xml", c.base, url.PathEscape(date), title)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
@@ -89,6 +92,7 @@ func (c *Client) GetFullTitleXMLStream(ctx context.Context, date string, title i
 	return res.Body, nil
 }
 
+// getJSON performs a GET and decodes JSON into out.
 func (c *Client) getJSON(ctx context.Context, u string, out any) error {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	req.Header.Set("Accept", "application/json")
@@ -105,6 +109,7 @@ func (c *Client) getJSON(ctx context.Context, u string, out any) error {
 	return json.NewDecoder(res.Body).Decode(out)
 }
 
+// do executes the request with retry and backoff on transient errors.
 func (c *Client) do(req *http.Request) (*http.Response, error) {
 	const maxAttempts = 5
 	var lastErr error
@@ -140,6 +145,7 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	return nil, lastErr
 }
 
+// sleepWithRetryAfter honors Retry-After when present, else uses backoff.
 func sleepWithRetryAfter(ctx context.Context, res *http.Response, attempt int) error {
 	if res.StatusCode == 429 {
 		if ra := res.Header.Get("Retry-After"); ra != "" {
@@ -171,6 +177,7 @@ func sleepWithRetryAfter(ctx context.Context, res *http.Response, attempt int) e
 	return sleepWithContext(ctx, sleep)
 }
 
+// sleepWithContext waits or returns early if the context is canceled.
 func sleepWithContext(ctx context.Context, d time.Duration) error {
 	t := time.NewTimer(d)
 	defer t.Stop()

@@ -23,6 +23,7 @@ import (
 	"ecfr-analytics/internal/store"
 )
 
+// main configures the HTTP server, routes, and shared dependencies.
 func main() {
 	baseURL := getenv("ECFR_BASE_URL", "https://www.ecfr.gov")
 	dataDir := getenv("DATA_DIR", "./data")
@@ -160,6 +161,7 @@ func main() {
 	log.Fatal(srv.ListenAndServe())
 }
 
+// refreshCurrent downloads latest datasets, stores snapshots, and recomputes metrics.
 func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map[string]any, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -316,6 +318,7 @@ sendLoop:
 	}, nil
 }
 
+// getenv returns the environment variable or a default.
 func getenv(k, def string) string {
 	if v := os.Getenv(k); v != "" {
 		return v
@@ -323,6 +326,7 @@ func getenv(k, def string) string {
 	return def
 }
 
+// getenvInt returns an int environment variable or a default.
 func getenvInt(k string, def int) int {
 	if v := os.Getenv(k); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
@@ -332,12 +336,14 @@ func getenvInt(k string, def int) int {
 	return def
 }
 
+// writeJSON encodes the response as JSON with status code.
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// withCORS adds permissive CORS headers for the API.
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -351,6 +357,7 @@ func withCORS(next http.Handler) http.Handler {
 	})
 }
 
+// split2 splits into at most two parts by the first separator.
 func split2(s, sep string) []string {
 	var out []string
 	i := 0
@@ -371,6 +378,7 @@ func split2(s, sep string) []string {
 	return out
 }
 
+// isRetryableDownloadErr identifies transient download errors worth retrying.
 func isRetryableDownloadErr(err error) bool {
 	if err == nil {
 		return false
