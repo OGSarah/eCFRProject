@@ -208,6 +208,7 @@ async function renderTopChart() {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
         y: {
@@ -259,6 +260,7 @@ async function loadTimeseries() {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       plugins: { legend: { display: true } },
       scales: {
         y: { grid: { color: gridColor } },

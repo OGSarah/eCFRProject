@@ -243,12 +243,13 @@
         display: flex;
         flex-direction: column;
         gap: 12px;
-        min-height: 320px;
+        min-height: 280px;
       }
 
       .chart-card canvas {
         width: 100% !important;
-        height: 260px !important;
+        height: 220px !important;
+        max-height: 240px;
       }
 
       footer {
@@ -369,13 +370,20 @@
             </select>
           </div>
         </div>
-        <div class="grid grid-2">
+        <div class="grid">
           <div class="card chart-card">
             <h3 id="topChartTitle">Top agencies by word count</h3>
             <canvas id="topChart"></canvas>
           </div>
+        </div>
+      </section>
+
+      <section class="section fade-in delay-2">
+        <div class="section-header">
+          <h2>Agency trendline</h2>
+        </div>
+        <div class="grid">
           <div class="card chart-card">
-            <h3>Agency trendline</h3>
             <div class="controls trendline-controls">
               <select id="agencySelect"></select>
               <select id="metricSelect">
