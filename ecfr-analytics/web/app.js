@@ -122,6 +122,21 @@ async function updateSummary() {
   setText("statCoverage", numberFmt.format(wcRows.length));
 }
 
+async function renderFocusPills() {
+  const wrap = document.getElementById("focusPills");
+  if (!wrap) return;
+  const rows = await loadLatest("word_count");
+  const top = topN(rows, 5);
+  wrap.innerHTML = "";
+
+  for (const [idx, r] of top.entries()) {
+    const pill = document.createElement("span");
+    pill.className = "pill";
+    pill.textContent = `${idx + 1}. ${r.name}`;
+    wrap.appendChild(pill);
+  }
+}
+
 function topN(rows, n = 12) {
   return [...rows]
     .filter((r) => typeof r.value === "number")
@@ -289,6 +304,7 @@ async function refresh() {
     metricsCache.clear();
     await loadAllLatest();
     await updateSummary();
+    await renderFocusPills();
     await renderTopChart();
     await loadTimeseries();
     await loadReviewTable();
@@ -376,6 +392,7 @@ document.getElementById("daysSelect").addEventListener("change", loadTimeseries)
   await loadAgencies();
   await loadAllLatest();
   await updateSummary();
+  await renderFocusPills();
   await renderTopChart();
   await loadReviewTable();
   await loadTimeseries();
