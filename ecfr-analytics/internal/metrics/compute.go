@@ -25,16 +25,31 @@ type titleKey struct {
 
 // ComputeLatest computes metrics for the newest snapshots and stores them.
 func ComputeLatest(ctx context.Context, st *store.Store) error {
-	agencies, err := loadAgencies(ctx, st)
-	if err != nil {
-		return err
-	}
 	titles, err := loadTitles(ctx, st)
 	if err != nil {
 		return err
 	}
+	titleDates := currentTitleDates(titles)
+	return computeWithTitleDates(ctx, st, titles, titleDates)
+}
 
-	// For each title, we only compute for the "current" snapshot date in titles.up_to_date_as_of
+// ComputeForTitleDates computes metrics for a specific snapshot date per title.
+func ComputeForTitleDates(ctx context.Context, st *store.Store, titleDates map[int]string) error {
+	titles, err := loadTitles(ctx, st)
+	if err != nil {
+		return err
+	}
+	return computeWithTitleDates(ctx, st, titles, titleDates)
+}
+
+// computeWithTitleDates is the shared worker for latest + historical metric computation.
+func computeWithTitleDates(ctx context.Context, st *store.Store, titles []ecfr.Title, titleDates map[int]string) error {
+	agencies, err := loadAgencies(ctx, st)
+	if err != nil {
+		return err
+	}
+
+	// For each title, we only compute for the provided snapshot dates.
 	// Then roll-up to agency based on (title, chapter) references.
 	// Also compute "churn" vs previous snapshot date if present.
 
@@ -44,8 +59,12 @@ func ComputeLatest(ctx context.Context, st *store.Store) error {
 		if t.Reserved {
 			continue
 		}
-		k := titleKey{Title: t.Number, Date: t.UpToDateAsOf}
-		xmlBytes, err := st.ReadSnapshotXML(ctx, t.Number, t.UpToDateAsOf)
+		date := titleDates[t.Number]
+		if date == "" {
+			continue
+		}
+		k := titleKey{Title: t.Number, Date: date}
+		xmlBytes, err := st.ReadSnapshotXML(ctx, t.Number, date)
 		if err != nil {
 			// snapshot might not exist if refresh didn't download for some reason
 			continue
@@ -68,9 +87,9 @@ func ComputeLatest(ctx context.Context, st *store.Store) error {
 			if ref.Chapter == "" {
 				continue
 			}
-			// Find "current" date for that title
-			td, ok := findTitleDate(titles, ref.Title)
-			if !ok {
+			// Find the date for that title
+			td := titleDates[ref.Title]
+			if td == "" {
 				continue
 			}
 			k := titleKey{Title: ref.Title, Date: td}
@@ -111,10 +130,10 @@ func ComputeLatest(ctx context.Context, st *store.Store) error {
 
 		// Custom metric: churn rate
 		// = fraction of chapters whose checksum changed vs previous snapshot date (best-effort).
-		churn := computeChurnBestEffort(ctx, st, a, titles, titleChapterText)
+		churn := computeChurnBestEffort(ctx, st, a, titleDates)
 
 		// issue_date: we store metrics at the newest issue_date among referenced titles.
-		date := newestReferencedDate(a, titles)
+		date := newestReferencedDateFromMap(a, titleDates)
 
 		_ = st.PutAgencyMetric(ctx, a.Slug, date, "word_count", &wc, nil)
 		_ = st.PutAgencyMetric(ctx, a.Slug, date, "words_per_chapter", &wordsPerChapter, nil)
@@ -133,8 +152,7 @@ func computeChurnBestEffort(
 	ctx context.Context,
 	st *store.Store,
 	a agencyRecord,
-	titles []ecfr.Title,
-	current map[titleKey]map[string]string,
+	titleDates map[int]string,
 ) float64 {
 	// Best effort: look up prior issue_date in snapshots table for each referenced title,
 	// compute checksum per referenced chapter and compare.
@@ -163,8 +181,8 @@ func computeChurnBestEffort(
 	}
 
 	for title, chapters := range m {
-		curDate, ok := findTitleDate(titles, title)
-		if !ok {
+		curDate := titleDates[title]
+		if curDate == "" {
 			continue
 		}
 		prevDate, ok := st.PreviousSnapshotDate(ctx, title, curDate)
@@ -277,24 +295,28 @@ func loadTitles(ctx context.Context, st *store.Store) ([]ecfr.Title, error) {
 	return out, nil
 }
 
-// findTitleDate returns the current issue date for a title number.
-func findTitleDate(titles []ecfr.Title, number int) (string, bool) {
+// currentTitleDates returns the latest issue date per title from stored metadata.
+func currentTitleDates(titles []ecfr.Title) map[int]string {
+	out := make(map[int]string, len(titles))
 	for _, t := range titles {
-		if t.Number == number {
-			return t.UpToDateAsOf, true
+		if t.Reserved {
+			continue
 		}
+		out[t.Number] = t.UpToDateAsOf
 	}
-	return "", false
+	return out
 }
 
-// newestReferencedDate finds the newest issue date referenced by an agency.
-func newestReferencedDate(a agencyRecord, titles []ecfr.Title) string {
+// newestReferencedDateFromMap finds the newest issue date referenced by an agency.
+func newestReferencedDateFromMap(a agencyRecord, titleDates map[int]string) string {
 	best := ""
 	for _, r := range a.Raw.CFRReferences {
-		if d, ok := findTitleDate(titles, r.Title); ok {
-			if d > best {
-				best = d
-			}
+		d := titleDates[r.Title]
+		if d == "" {
+			continue
+		}
+		if d > best {
+			best = d
 		}
 	}
 	return best

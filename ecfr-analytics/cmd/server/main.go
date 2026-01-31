@@ -115,13 +115,26 @@ func main() {
 
 	// Status / metadata
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		// Expose refresh time and any available historical metric windows.
 		lastRefresh, err := st.GetState(r.Context(), "last_refresh")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		historyOffsets, err := st.GetState(r.Context(), "history_offsets")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		historyUpdatedAt, err := st.GetState(r.Context(), "history_last_refresh")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"last_refresh": lastRefresh,
+			"last_refresh":         lastRefresh,
+			"history_offsets":      historyOffsets,
+			"history_last_refresh": historyUpdatedAt,
 		})
 	})
 
@@ -244,6 +257,7 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 		date  string
 	}
 	jobs := make([]job, 0, len(titles))
+	historyOffsets := []int{30, 180, 365}
 	for _, t := range titles {
 		if t.Reserved {
 			continue
@@ -257,14 +271,16 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 			jobs = append(jobs, job{title: t.Number, date: date})
 		}
 
-		// Backfill: download the snapshot from exactly 365 days prior.
-		if prior := dateMinusDays(date, 365); prior != "" {
-			existsPrior, err := st.SnapshotExists(ctx, t.Number, prior)
-			if err != nil {
-				return nil, err
-			}
-			if !existsPrior {
-				jobs = append(jobs, job{title: t.Number, date: prior})
+		// Backfill: download snapshots for multiple historical offsets.
+		for _, offset := range historyOffsets {
+			if prior := dateMinusDays(date, offset); prior != "" {
+				existsPrior, err := st.SnapshotExists(ctx, t.Number, prior)
+				if err != nil {
+					return nil, err
+				}
+				if !existsPrior {
+					jobs = append(jobs, job{title: t.Number, date: prior})
+				}
 			}
 		}
 	}
@@ -340,21 +356,57 @@ sendLoop:
 	default:
 	}
 
-	// 4) Compute metrics for the newest snapshot date per title, rolled up to agencies
+	// 4) Compute metrics for the newest snapshot date per title, rolled up to agencies.
 	if err := metrics.ComputeLatest(ctx, st); err != nil {
 		return nil, err
+	}
+	// 5) Compute metrics for the backfilled snapshots (30/180/365 days prior), if present.
+	availableOffsets := make([]int, 0, len(historyOffsets))
+	for _, offset := range historyOffsets {
+		// Build a per-title date map for this historical window.
+		priorDates := map[int]string{}
+		for _, t := range titles {
+			if t.Reserved {
+				continue
+			}
+			prior := dateMinusDays(t.UpToDateAsOf, offset)
+			if prior == "" {
+				continue
+			}
+			exists, err := st.SnapshotExists(ctx, t.Number, prior)
+			if err != nil {
+				return nil, err
+			}
+			if exists {
+				priorDates[t.Number] = prior
+			}
+		}
+		if len(priorDates) == 0 {
+			continue
+		}
+		if err := metrics.ComputeForTitleDates(ctx, st, priorDates); err != nil {
+			return nil, err
+		}
+		availableOffsets = append(availableOffsets, offset)
 	}
 
 	computedAt := time.Now().Format(time.RFC3339)
 	if err := st.SetState(ctx, "last_refresh", computedAt); err != nil {
 		return nil, err
 	}
+	// Track which historical windows were actually computed for UI visibility.
+	if err := st.SetState(ctx, "history_last_refresh", computedAt); err != nil {
+		return nil, err
+	}
+	if err := st.SetState(ctx, "history_offsets", joinInts(availableOffsets, ",")); err != nil {
+		return nil, err
+	}
 
 	return map[string]any{
-		"agencies":    len(agencies),
-		"titles":      len(titles),
-		"downloaded":  int(atomic.LoadInt64(&downloaded)),
-		"computed_at": computedAt,
+		"agencies":     len(agencies),
+		"titles":       len(titles),
+		"downloaded":   int(atomic.LoadInt64(&downloaded)),
+		"computed_at":  computedAt,
 		"last_refresh": computedAt,
 	}, nil
 }
@@ -453,4 +505,16 @@ func indexOf(s, sub string) int {
 		}
 	}
 	return -1
+}
+
+// joinInts formats a list of integers into a separator-delimited string.
+func joinInts(values []int, sep string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(values))
+	for _, v := range values {
+		parts = append(parts, strconv.Itoa(v))
+	}
+	return strings.Join(parts, sep)
 }
