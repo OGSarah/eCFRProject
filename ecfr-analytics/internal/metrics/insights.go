@@ -9,7 +9,6 @@ import (
 	"ecfr-analytics/internal/store"
 )
 
-// GrowthHotspot captures a large word-count increase over a window.
 type GrowthHotspot struct {
 	Agency  string  `json:"agency"`
 	Delta   float64 `json:"delta"`
@@ -18,7 +17,6 @@ type GrowthHotspot struct {
 	Window  int     `json:"window_days"`
 }
 
-// GrowthHotspots returns the top N agencies with the largest word_count increases in a window.
 func GrowthHotspots(ctx context.Context, st *store.Store, windowDays int, limit int) ([]GrowthHotspot, error) {
 	agencies, err := loadAgenciesForInsights(ctx, st)
 	if err != nil {
@@ -38,7 +36,6 @@ func GrowthHotspots(ctx context.Context, st *store.Store, windowDays int, limit 
 		if len(series) < 2 {
 			continue
 		}
-		// series is newest -> oldest; reverse for oldest -> newest
 		first := series[len(series)-1]
 		last := series[0]
 		firstVal, ok1 := first["value"].(float64)
@@ -65,8 +62,6 @@ func GrowthHotspots(ctx context.Context, st *store.Store, windowDays int, limit 
 	}
 	return results, nil
 }
-
-// ---- local helpers (duplicated to keep compute.go unchanged) ----
 
 func loadAgenciesForInsights(ctx context.Context, st *store.Store) ([]agencyRecord, error) {
 	rows, err := st.DB().QueryContext(ctx, `SELECT slug, name, json FROM agencies`)

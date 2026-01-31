@@ -10,20 +10,17 @@ import (
 	"ecfr-analytics/internal/store"
 )
 
-// agencyRecord ties stored agency metadata to parsed CFR references.
 type agencyRecord struct {
 	Slug string
 	Name string
 	Raw  ecfr.Agency
 }
 
-// titleKey identifies a title and issue date pair.
 type titleKey struct {
 	Title int
 	Date  string
 }
 
-// ComputeLatest computes metrics for the newest snapshots and stores them.
 func ComputeLatest(ctx context.Context, st *store.Store) error {
 	titles, err := loadTitles(ctx, st)
 	if err != nil {
@@ -33,7 +30,6 @@ func ComputeLatest(ctx context.Context, st *store.Store) error {
 	return computeWithTitleDates(ctx, st, titles, titleDates)
 }
 
-// ComputeForTitleDates computes metrics for a specific snapshot date per title.
 func ComputeForTitleDates(ctx context.Context, st *store.Store, titleDates map[int]string) error {
 	titles, err := loadTitles(ctx, st)
 	if err != nil {
@@ -42,16 +38,11 @@ func ComputeForTitleDates(ctx context.Context, st *store.Store, titleDates map[i
 	return computeWithTitleDates(ctx, st, titles, titleDates)
 }
 
-// computeWithTitleDates is the shared worker for latest + historical metric computation.
 func computeWithTitleDates(ctx context.Context, st *store.Store, titles []ecfr.Title, titleDates map[int]string) error {
 	agencies, err := loadAgencies(ctx, st)
 	if err != nil {
 		return err
 	}
-
-	// For each title, we only compute for the provided snapshot dates.
-	// Then roll-up to agency based on (title, chapter) references.
-	// Also compute "churn" vs previous snapshot date if present.
 
 	titleChapterText := map[titleKey]map[string]string{}
 
@@ -66,7 +57,6 @@ func computeWithTitleDates(ctx context.Context, st *store.Store, titles []ecfr.T
 		k := titleKey{Title: t.Number, Date: date}
 		xmlBytes, err := st.ReadSnapshotXML(ctx, t.Number, date)
 		if err != nil {
-			// snapshot might not exist if refresh didn't download for some reason
 			continue
 		}
 		chText, err := ecfr.ParseTitleChapters(xmlBytes)
@@ -77,17 +67,14 @@ func computeWithTitleDates(ctx context.Context, st *store.Store, titles []ecfr.T
 	}
 
 	for _, a := range agencies {
-		// collect all chapter texts that map to this agency
 		var allText string
 		chapterChecksums := []string{}
 		chapterSet := map[string]bool{}
 
 		for _, ref := range a.Raw.CFRReferences {
-			// If chapter missing, we cannot attribute precisely; skip (avoid misleading metrics).
 			if ref.Chapter == "" {
 				continue
 			}
-			// Find the date for that title
 			td := titleDates[ref.Title]
 			if td == "" {
 				continue
@@ -110,29 +97,20 @@ func computeWithTitleDates(ctx context.Context, st *store.Store, titles []ecfr.T
 			continue
 		}
 
-		// ---- Metrics that provide meaningful information ----
-		// Word count: “how much regulation text is this agency responsible for?”
 		wc := float64(ecfr.WordCount(allText))
 
-		// Custom metric: words per referenced chapter (regulatory density).
-		// Helps compare breadth vs depth of responsibility.
 		denom := len(chapterSet)
 		if denom == 0 {
 			denom = 1
 		}
 		wordsPerChapter := wc / float64(denom)
 
-		// Agency checksum: stable fingerprint to detect changes
 		sum := ecfr.ChecksumHex(allText)
 
-		// Readability: proxy for complexity / stakeholder burden
 		fre := ecfr.FleschReadingEase(allText)
 
-		// Custom metric: churn rate
-		// = fraction of chapters whose checksum changed vs previous snapshot date (best-effort).
 		churn := computeChurnBestEffort(ctx, st, a, titleDates)
 
-		// issue_date: we store metrics at the newest issue_date among referenced titles.
 		date := newestReferencedDateFromMap(a, titleDates)
 
 		_ = st.PutAgencyMetric(ctx, a.Slug, date, "word_count", &wc, nil)
@@ -141,22 +119,18 @@ func computeWithTitleDates(ctx context.Context, st *store.Store, titles []ecfr.T
 		_ = st.PutAgencyMetric(ctx, a.Slug, date, "readability", &fre, nil)
 		_ = st.PutAgencyMetric(ctx, a.Slug, date, "churn", &churn, nil)
 
-		_ = chapterChecksums // keep if you want per-chapter diagnostics later
+		_ = chapterChecksums
 	}
 
 	return nil
 }
 
-// computeChurnBestEffort estimates churn using the nearest previous snapshots.
 func computeChurnBestEffort(
 	ctx context.Context,
 	st *store.Store,
 	a agencyRecord,
 	titleDates map[int]string,
 ) float64 {
-	// Best effort: look up prior issue_date in snapshots table for each referenced title,
-	// compute checksum per referenced chapter and compare.
-	// If we can’t find a prior snapshot, churn = 0 for that title.
 	type pair struct {
 		title   int
 		chapter string
@@ -174,7 +148,6 @@ func computeChurnBestEffort(
 	changed := 0
 	total := 0
 
-	// Group by title
 	m := map[int][]string{}
 	for _, p := range refs {
 		m[p.title] = append(m[p.title], p.chapter)
@@ -225,9 +198,6 @@ func computeChurnBestEffort(
 	return float64(changed) / float64(total)
 }
 
-// ---- helpers to read back stored agencies & titles ----
-
-// loadAgencies loads agencies from storage and flattens the tree.
 func loadAgencies(ctx context.Context, st *store.Store) ([]agencyRecord, error) {
 	rows, err := st.DB().QueryContext(ctx, `SELECT slug, name, json FROM agencies`)
 	if err != nil {
@@ -247,10 +217,7 @@ func loadAgencies(ctx context.Context, st *store.Store) ([]agencyRecord, error) 
 	return flattenAgencyTree(out), nil
 }
 
-// flattenAgencyTree walks nested agencies into a flat, de-duped slice.
 func flattenAgencyTree(in []agencyRecord) []agencyRecord {
-	// agencies.json contains nested children; we stored top-level json.
-	// We re-flatten by walking each Raw agency tree.
 	var out []agencyRecord
 	var walk func(a ecfr.Agency)
 	walk = func(a ecfr.Agency) {
@@ -262,7 +229,6 @@ func flattenAgencyTree(in []agencyRecord) []agencyRecord {
 	for _, r := range in {
 		walk(r.Raw)
 	}
-	// de-dupe by slug
 	seen := map[string]agencyRecord{}
 	for _, r := range out {
 		seen[r.Slug] = r
@@ -275,7 +241,6 @@ func flattenAgencyTree(in []agencyRecord) []agencyRecord {
 	return out
 }
 
-// loadTitles reads titles from storage.
 func loadTitles(ctx context.Context, st *store.Store) ([]ecfr.Title, error) {
 	rows, err := st.DB().QueryContext(ctx, `SELECT number, name, up_to_date_as_of, reserved FROM titles`)
 	if err != nil {
@@ -295,7 +260,6 @@ func loadTitles(ctx context.Context, st *store.Store) ([]ecfr.Title, error) {
 	return out, nil
 }
 
-// currentTitleDates returns the latest issue date per title from stored metadata.
 func currentTitleDates(titles []ecfr.Title) map[int]string {
 	out := make(map[int]string, len(titles))
 	for _, t := range titles {
@@ -307,7 +271,6 @@ func currentTitleDates(titles []ecfr.Title) map[int]string {
 	return out
 }
 
-// newestReferencedDateFromMap finds the newest issue date referenced by an agency.
 func newestReferencedDateFromMap(a agencyRecord, titleDates map[int]string) string {
 	best := ""
 	for _, r := range a.Raw.CFRReferences {
@@ -322,7 +285,6 @@ func newestReferencedDateFromMap(a agencyRecord, titleDates map[int]string) stri
 	return best
 }
 
-// uniqueStrings removes duplicates while preserving first-seen order.
 func uniqueStrings(in []string) []string {
 	seen := map[string]bool{}
 	out := make([]string, 0, len(in))
@@ -335,7 +297,6 @@ func uniqueStrings(in []string) []string {
 	return out
 }
 
-// refKey builds a stable key for a title/chapter pair.
 func refKey(title int, chapter string) string {
 	return fmt.Sprintf("%d:%s", title, chapter)
 }

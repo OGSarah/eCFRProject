@@ -15,18 +15,15 @@ import (
 	"ecfr-analytics/internal/ecfr"
 )
 
-// Store wraps DB and filesystem access for eCFR data.
 type Store struct {
 	db      *sql.DB
 	dataDir string
 }
 
-// New constructs a Store backed by the provided DB and data directory.
 func New(db *sql.DB, dataDir string) *Store {
 	return &Store{db: db, dataDir: dataDir}
 }
 
-// InitSchema creates all required tables if they do not exist.
 func (s *Store) InitSchema() error {
 	ddl := `
 CREATE TABLE IF NOT EXISTS agencies (
@@ -58,9 +55,9 @@ CREATE TABLE IF NOT EXISTS agency_metrics (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   agency_slug TEXT NOT NULL,
   issue_date TEXT NOT NULL,
-  metric TEXT NOT NULL,              -- word_count, words_per_chapter, checksum, churn, readability
-  value_num REAL,                    -- numeric metrics
-  value_text TEXT,                   -- e.g., checksum
+  metric TEXT NOT NULL,
+  value_num REAL,
+  value_text TEXT,
   created_at TEXT NOT NULL,
   UNIQUE(agency_slug, issue_date, metric),
   FOREIGN KEY(agency_slug) REFERENCES agencies(slug)
@@ -76,7 +73,6 @@ CREATE TABLE IF NOT EXISTS app_state (
 	return err
 }
 
-// SetState upserts a key/value in the app_state table.
 func (s *Store) SetState(ctx context.Context, key, value string) error {
 	now := time.Now().Format(time.RFC3339)
 	_, err := s.db.ExecContext(ctx, `
@@ -87,7 +83,6 @@ ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated
 	return err
 }
 
-// GetState retrieves a value from the app_state table.
 func (s *Store) GetState(ctx context.Context, key string) (string, error) {
 	var value string
 	err := s.db.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key=?`, key).Scan(&value)
@@ -97,7 +92,6 @@ func (s *Store) GetState(ctx context.Context, key string) (string, error) {
 	return value, err
 }
 
-// UpsertAgencies stores agencies JSON and metadata.
 func (s *Store) UpsertAgencies(ctx context.Context, agencies []ecfr.Agency) error {
 	now := time.Now().Format(time.RFC3339)
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -125,7 +119,6 @@ ON CONFLICT(slug) DO UPDATE SET name=excluded.name, json=excluded.json, updated_
 	return tx.Commit()
 }
 
-// UpsertTitles stores titles and their current issue dates.
 func (s *Store) UpsertTitles(ctx context.Context, titles []ecfr.Title) error {
 	now := time.Now().Format(time.RFC3339)
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -156,7 +149,6 @@ ON CONFLICT(number) DO UPDATE SET name=excluded.name, up_to_date_as_of=excluded.
 	return tx.Commit()
 }
 
-// SnapshotExists checks DB and filesystem for a snapshot file.
 func (s *Store) SnapshotExists(ctx context.Context, title int, date string) (bool, error) {
 	var path string
 	err := s.db.QueryRowContext(ctx, `SELECT file_path FROM snapshots WHERE title_number=? AND issue_date=? LIMIT 1`, title, date).Scan(&path)
@@ -176,12 +168,10 @@ func (s *Store) SnapshotExists(ctx context.Context, title int, date string) (boo
 	return true, nil
 }
 
-// SaveSnapshot stores an XML snapshot from a byte slice.
 func (s *Store) SaveSnapshot(ctx context.Context, title int, date string, xmlBytes []byte) error {
 	return s.SaveSnapshotFromReader(ctx, title, date, bytes.NewReader(xmlBytes))
 }
 
-// SaveSnapshotFromReader streams, gzips, and stores an XML snapshot.
 func (s *Store) SaveSnapshotFromReader(ctx context.Context, title int, date string, r io.Reader) error {
 	fn := fmt.Sprintf("title-%d_%s.xml.gz", title, date)
 	dir := filepath.Join(s.dataDir, "xml")
@@ -198,7 +188,7 @@ func (s *Store) SaveSnapshotFromReader(ctx context.Context, title int, date stri
 	}()
 
 	gz := gzip.NewWriter(tmp)
-	const maxXMLSize = 300 << 20 // 300MB safety limit on source XML
+	const maxXMLSize = 300 << 20
 	n, err := io.Copy(gz, io.LimitReader(r, maxXMLSize+1))
 	if err == nil && n > maxXMLSize {
 		err = fmt.Errorf("snapshot too large")
@@ -227,7 +217,6 @@ VALUES(?,?,?,?)
 	return err
 }
 
-// ReadSnapshotXML loads and decompresses a stored snapshot.
 func (s *Store) ReadSnapshotXML(ctx context.Context, title int, date string) ([]byte, error) {
 	var path string
 	if err := s.db.QueryRowContext(ctx, `SELECT file_path FROM snapshots WHERE title_number=? AND issue_date=?`, title, date).Scan(&path); err != nil {
@@ -242,10 +231,9 @@ func (s *Store) ReadSnapshotXML(ctx context.Context, title int, date string) ([]
 		return nil, err
 	}
 	defer r.Close()
-	return ioReadAllLimit(r, 200<<20) // 200MB safety
+	return ioReadAllLimit(r, 200<<20)
 }
 
-// ioReadAllLimit reads up to a limit to avoid runaway memory usage.
 func ioReadAllLimit(r interface{ Read([]byte) (int, error) }, limit int64) ([]byte, error) {
 	var buf bytes.Buffer
 	var total int64
@@ -263,14 +251,12 @@ func ioReadAllLimit(r interface{ Read([]byte) (int, error) }, limit int64) ([]by
 			if err.Error() == "EOF" {
 				break
 			}
-			// handle io.EOF without importing io
 			if err == os.ErrClosed {
 				break
 			}
 			if err.Error() == "EOF" {
 				break
 			}
-			// best effort
 			if err.Error() == "unexpected EOF" {
 				break
 			}
@@ -280,7 +266,6 @@ func ioReadAllLimit(r interface{ Read([]byte) (int, error) }, limit int64) ([]by
 	return buf.Bytes(), nil
 }
 
-// ListAgencies returns agency names and slugs for UI selection.
 func (s *Store) ListAgencies(ctx context.Context) ([]map[string]any, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT slug, name FROM agencies ORDER BY name`)
 	if err != nil {
@@ -298,7 +283,6 @@ func (s *Store) ListAgencies(ctx context.Context) ([]map[string]any, error) {
 	return out, nil
 }
 
-// PutAgencyMetric upserts a single metric value for an agency.
 func (s *Store) PutAgencyMetric(ctx context.Context, slug, date, metric string, num *float64, text *string) error {
 	_, err := s.db.ExecContext(ctx, `
 INSERT INTO agency_metrics(agency_slug, issue_date, metric, value_num, value_text, created_at)
@@ -308,9 +292,7 @@ ON CONFLICT(agency_slug, issue_date, metric) DO UPDATE SET value_num=excluded.va
 	return err
 }
 
-// LatestAgencyMetric returns the latest metric per agency.
 func (s *Store) LatestAgencyMetric(ctx context.Context, metric string) ([]map[string]any, error) {
-	// latest by issue_date per agency for a given metric
 	q := `
 SELECT m.agency_slug, a.name, m.issue_date, m.value_num, m.value_text
 FROM agency_metrics m
@@ -345,7 +327,6 @@ ORDER BY a.name
 	return out, nil
 }
 
-// AgencyMetricSeries returns a metric time series for an agency.
 func (s *Store) AgencyMetricSeries(ctx context.Context, slug, metric string, days int) ([]map[string]any, error) {
 	q := `
 SELECT issue_date, value_num, value_text
@@ -380,10 +361,8 @@ LIMIT ?
 	return out, nil
 }
 
-// DB exposes the underlying DB for internal queries.
 func (s *Store) DB() *sql.DB { return s.db }
 
-// PreviousSnapshotDate finds the prior snapshot date for a title.
 func (s *Store) PreviousSnapshotDate(ctx context.Context, title int, currentDate string) (string, bool) {
 	q := `SELECT issue_date FROM snapshots WHERE title_number=? AND issue_date < ? ORDER BY issue_date DESC LIMIT 1`
 	var d string

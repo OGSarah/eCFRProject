@@ -1,4 +1,3 @@
-// API returns a same-origin path for API calls.
 const API = (path) => path;
 
 const metricLabels = {
@@ -17,39 +16,33 @@ const numberFmt = new Intl.NumberFormat("en-US");
 const themeKey = "ecfr-theme";
 const themeQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-// jget performs a GET request and returns parsed JSON.
 async function jget(path) {
   const res = await fetch(API(path));
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   return res.json();
 }
 
-// jpost performs a POST request and returns parsed JSON.
 async function jpost(path) {
   const res = await fetch(API(path), { method: "POST" });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   return res.json();
 }
 
-// fmtNumber formats numeric values with thousands separators.
 function fmtNumber(value) {
   if (typeof value !== "number") return "--";
   return numberFmt.format(Math.round(value));
 }
 
-// fmtPercent formats a fractional value as a percentage.
 function fmtPercent(value) {
   if (typeof value !== "number") return "--";
   return `${(value * 100).toFixed(1)}%`;
 }
 
-// fmtScore formats a numeric score with one decimal.
 function fmtScore(value) {
   if (typeof value !== "number") return "--";
   return value.toFixed(1);
 }
 
-// fmtDateTime formats an ISO-ish timestamp into a local date/time string.
 function fmtDateTime(value) {
   if (!value) return "--";
   const dt = new Date(value);
@@ -64,7 +57,6 @@ function fmtDateTime(value) {
   });
 }
 
-// formatValue picks a formatter based on metric type.
 function formatValue(metric, value) {
   switch (metric) {
     case "word_count":
@@ -80,13 +72,11 @@ function formatValue(metric, value) {
   }
 }
 
-// setText updates an element's text content when present.
 function setText(id, value) {
   const el = document.getElementById(id);
   if (el) el.textContent = value;
 }
 
-// loadLatest fetches and caches the latest rows for a metric.
 async function loadLatest(metric) {
   if (metricsCache.has(metric)) return metricsCache.get(metric);
   const rows = await jget(`/api/metrics/latest?metric=${encodeURIComponent(metric)}`);
@@ -94,7 +84,6 @@ async function loadLatest(metric) {
   return rows;
 }
 
-// loadAllLatest warms the cache for all primary metrics.
 async function loadAllLatest() {
   await Promise.all([
     loadLatest("word_count"),
@@ -105,7 +94,6 @@ async function loadAllLatest() {
   ]);
 }
 
-// loadAgencies fetches agencies and populates the selector.
 async function loadAgencies() {
   const agencies = await jget("/api/agencies");
   const sel = document.getElementById("agencySelect");
@@ -119,25 +107,21 @@ async function loadAgencies() {
   setText("statAgencies", numberFmt.format(agencies.length));
 }
 
-// sumMetric totals numeric values in a metrics list.
 function sumMetric(rows) {
   return rows.reduce((acc, r) => acc + (typeof r.value === "number" ? r.value : 0), 0);
 }
 
-// avgMetric averages numeric values in a metrics list.
 function avgMetric(rows) {
   const nums = rows.filter((r) => typeof r.value === "number");
   if (!nums.length) return 0;
   return nums.reduce((acc, r) => acc + r.value, 0) / nums.length;
 }
 
-// latestDate returns the most recent date from a metrics list.
 function latestDate(rows) {
   const dates = rows.map((r) => r.date).filter(Boolean).sort();
   return dates.length ? dates[dates.length - 1] : "--";
 }
 
-// formatHistoryStatus renders a compact availability label for historical metrics.
 function formatHistoryStatus(status) {
   if (!status) return "Historical metrics: --";
   const offsets = String(status.history_offsets || "")
@@ -150,7 +134,6 @@ function formatHistoryStatus(status) {
   return `Historical metrics: ${offsetsLabel} days available${asOf}`;
 }
 
-// updateSummary refreshes headline stats and history status.
 async function updateSummary() {
   const wcRows = await loadLatest("word_count");
   const churnRows = await loadLatest("churn");
@@ -171,7 +154,6 @@ async function updateSummary() {
   setText("historyStatus", formatHistoryStatus(status));
 }
 
-// topN returns the top N numeric rows by value.
 function topN(rows, n = 12) {
   return [...rows]
     .filter((r) => typeof r.value === "number")
@@ -179,7 +161,6 @@ function topN(rows, n = 12) {
     .slice(0, n);
 }
 
-// bottomN returns the bottom N numeric rows by value.
 function bottomN(rows, n = 5) {
   return [...rows]
     .filter((r) => typeof r.value === "number")
@@ -187,19 +168,16 @@ function bottomN(rows, n = 5) {
     .slice(0, n);
 }
 
-// minDate returns the earliest date from a metrics list.
 function minDate(rows) {
   const dates = rows.map((r) => r.date).filter(Boolean).sort();
   return dates.length ? dates[0] : "--";
 }
 
-// maxDate returns the latest date from a metrics list.
 function maxDate(rows) {
   const dates = rows.map((r) => r.date).filter(Boolean).sort();
   return dates.length ? dates[dates.length - 1] : "--";
 }
 
-// chartColor selects the primary chart color per metric.
 function chartColor(metric) {
   switch (metric) {
     case "churn":
@@ -213,22 +191,18 @@ function chartColor(metric) {
   }
 }
 
-// cssVar reads a CSS custom property from the root element.
 function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-// chartGridColor returns the gridline color for charts.
 function chartGridColor() {
   return cssVar("--chart-grid") || "rgba(15, 27, 45, 0.08)";
 }
 
-// chartFill returns the area fill color for charts.
 function chartFill() {
   return cssVar("--chart-fill") || "rgba(28, 110, 140, 0.15)";
 }
 
-// renderTopChart draws the top-agencies bar chart.
 async function renderTopChart() {
   const metric = document.getElementById("topMetricSelect").value;
   const rows = await loadLatest(metric);
@@ -273,7 +247,6 @@ async function renderTopChart() {
   topChart = new Chart(document.getElementById("topChart"), cfg);
 }
 
-// renderInsightList renders a simple list of labeled metric values.
 function renderInsightList(el, rows, fmt) {
   el.innerHTML = "";
   for (const r of rows) {
@@ -284,7 +257,6 @@ function renderInsightList(el, rows, fmt) {
   }
 }
 
-// renderInsights updates the insight cards and lists.
 async function renderInsights() {
   const readRows = await loadLatest("readability");
   const wcRows = await loadLatest("word_count");
@@ -307,7 +279,6 @@ async function renderInsights() {
   }
 }
 
-// renderGrowthHotspots populates the growth list from the API.
 async function renderGrowthHotspots() {
   const list = document.getElementById("growthHotspots");
   if (!list) return;
@@ -316,7 +287,6 @@ async function renderGrowthHotspots() {
   renderInsightList(list, display, fmtNumber);
 }
 
-// loadTimeseries fetches data and redraws the trendline chart.
 async function loadTimeseries() {
   const slug = document.getElementById("agencySelect").value;
   if (!slug) return;
@@ -361,14 +331,12 @@ async function loadTimeseries() {
   updateAgencyCards(slug);
 }
 
-// findMetricValue returns a cached metric value for a specific agency.
 function findMetricValue(metric, slug) {
   const rows = metricsCache.get(metric) || [];
   const row = rows.find((r) => r.slug === slug);
   return row ? row.value : null;
 }
 
-// updateAgencyCards refreshes the per-agency stat tiles.
 function updateAgencyCards(slug) {
   setText("agencyWordCount", formatValue("word_count", findMetricValue("word_count", slug)));
   setText("agencyChurn", formatValue("churn", findMetricValue("churn", slug)));
@@ -376,7 +344,6 @@ function updateAgencyCards(slug) {
   setText("agencyWordsPerChapter", formatValue("words_per_chapter", findMetricValue("words_per_chapter", slug)));
 }
 
-// loadReviewTable renders the sortable review table.
 async function loadReviewTable() {
   const metric = document.getElementById("reviewMetricSelect").value;
   const search = document.getElementById("reviewSearch").value.trim().toLowerCase();
@@ -408,7 +375,6 @@ async function loadReviewTable() {
   }
 }
 
-// refresh triggers a server-side refresh and reloads UI data.
 async function refresh() {
   try {
     const r = await jpost("/api/refresh");
@@ -425,7 +391,6 @@ async function refresh() {
   }
 }
 
-// exportCsv downloads the latest metric set as CSV.
 function exportCsv() {
   const metric = document.getElementById("reviewMetricSelect").value;
   const rows = metricsCache.get(metric) || [];
@@ -448,7 +413,6 @@ function exportCsv() {
   URL.revokeObjectURL(url);
 }
 
-// escapeHtml avoids HTML injection in rendered strings.
 function escapeHtml(s) {
   return String(s)
     .replaceAll("&", "&amp;")
@@ -456,7 +420,6 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;");
 }
 
-// applyTheme switches between light and dark theme styles.
 function applyTheme(theme) {
   const root = document.documentElement;
   if (theme) {
@@ -477,12 +440,10 @@ function applyTheme(theme) {
   Chart.defaults.font.family = '"IBM Plex Sans", "Helvetica Neue", Arial, sans-serif';
 }
 
-// loadThemePreference returns the system theme preference.
 function loadThemePreference() {
   return themeQuery.matches ? "dark" : "light";
 }
 
-// syncThemeFromSystem reapplies theme and redraws visuals.
 function syncThemeFromSystem() {
   applyTheme(themeQuery.matches ? "dark" : "light");
   renderTopChart();
@@ -491,7 +452,6 @@ function syncThemeFromSystem() {
   renderGrowthHotspots();
 }
 
-// refreshFromServer reloads cached data and redraws UI panels.
 async function refreshFromServer() {
   metricsCache.clear();
   await loadAllLatest();
@@ -510,7 +470,7 @@ document.getElementById("reviewSearch").addEventListener("input", loadReviewTabl
 document.getElementById("agencySelect").addEventListener("change", loadTimeseries);
 document.getElementById("metricSelect").addEventListener("change", loadTimeseries);
 document.getElementById("daysSelect").addEventListener("change", loadTimeseries);
-// init boots the UI, pulls data, and schedules refreshes.
+
 (async function init() {
   localStorage.removeItem(themeKey);
   applyTheme(loadThemePreference());
