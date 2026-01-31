@@ -48,6 +48,11 @@ function formatValue(metric, value) {
   }
 }
 
+function formatDelta(metric, delta) {
+  if (typeof delta !== "number") return "";
+  return formatValue(metric, Math.abs(delta));
+}
+
 function setText(id, value) {
   const el = document.getElementById(id);
   if (el) el.textContent = value;
@@ -58,6 +63,11 @@ async function loadLatest(metric) {
   const rows = await jget(`/api/metrics/latest?metric=${encodeURIComponent(metric)}`);
   metricsCache.set(metric, rows);
   return rows;
+}
+
+async function loadState(key) {
+  const res = await jget(`/api/state?key=${encodeURIComponent(key)}`);
+  return res?.value ?? "";
 }
 
 async function loadAllLatest() {
@@ -104,6 +114,11 @@ async function updateSummary() {
   setText("statCoverage", numberFmt.format(wcRows.length));
 }
 
+async function updateLastRefresh() {
+  const value = await loadState("last_refresh");
+  setText("lastRefresh", value || "--");
+}
+
 function topN(rows, n = 12) {
   return [...rows]
     .filter((r) => typeof r.value === "number")
@@ -129,18 +144,8 @@ function renderInsightList(el, rows, fmt) {
 }
 
 async function renderInsights() {
-  const readRows = await loadLatest("readability");
   const wcRows = await loadLatest("word_count");
   const wpcRows = await loadLatest("words_per_chapter");
-
-  const readList = document.getElementById("readabilityLow");
-  if (readList) {
-    const mostComplex = [...readRows]
-      .filter((r) => typeof r.value === "number")
-      .sort((a, b) => a.value - b.value)
-      .slice(0, 5);
-    renderInsightList(readList, mostComplex, fmtScore);
-  }
 
   const densityList = document.getElementById("densityExtremes");
   if (densityList) {
@@ -155,6 +160,15 @@ async function loadReviewTable() {
   const metric = document.getElementById("reviewMetricSelect").value;
   const search = document.getElementById("reviewSearch").value.trim().toLowerCase();
   const rows = await loadLatest(metric);
+  const changeHeader = document.getElementById("reviewChangeHeader");
+  const valueHeader = document.getElementById("reviewValueHeader");
+  const hideChange = metric === "checksum";
+  if (changeHeader) {
+    changeHeader.classList.toggle("hidden", hideChange);
+  }
+  if (valueHeader) {
+    valueHeader.textContent = hideChange ? "Value" : "Metric value";
+  }
 
   let filtered = rows;
   if (search) {
@@ -177,7 +191,25 @@ async function loadReviewTable() {
     const value = isChecksum
       ? `<code>${escapeHtml(String(r.value ?? ""))}</code>`
       : `<span class="highlight-green">${escapeHtml(formatValue(metric, r.value))}</span>`;
-    tr.innerHTML = `<td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.date)}</td><td>${value}</td>`;
+    let changeHtml = "";
+    if (!isChecksum) {
+      changeHtml = `<span class="change-dash">—</span>`;
+      if (typeof r.delta === "number") {
+        if (r.delta > 0) {
+          const deltaText = formatDelta(metric, r.delta);
+          changeHtml = `<span class="change-value">${escapeHtml(deltaText)}<span class="change-arrow up"></span></span>`;
+        } else if (r.delta < 0) {
+          const deltaText = formatDelta(metric, r.delta);
+          changeHtml = `<span class="change-value">${escapeHtml(deltaText)}<span class="change-arrow down"></span></span>`;
+        } else {
+          changeHtml = `<span class="change-dash">—</span>`;
+        }
+      } else if (typeof r.changed === "boolean") {
+        changeHtml = r.changed ? "changed" : `<span class="change-dash">—</span>`;
+      }
+    }
+    const changeCell = `<td class="${hideChange ? "hidden" : ""}">${changeHtml}</td>`;
+    tr.innerHTML = `<td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.date)}</td><td>${value}</td>${changeCell}`;
     tbody.appendChild(tr);
   }
 }
@@ -234,6 +266,7 @@ async function refreshFromServer() {
   await updateSummary();
   await renderInsights();
   await loadReviewTable();
+  await updateLastRefresh();
 }
 
 document.getElementById("reviewMetricSelect").addEventListener("change", loadReviewTable);

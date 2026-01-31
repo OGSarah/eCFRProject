@@ -23,11 +23,19 @@ import (
 	"ecfr-analytics/internal/store"
 )
 
+type serverDeps struct {
+	refresh       func(ctx context.Context) (map[string]any, error)
+	listAgencies  func(ctx context.Context) ([]map[string]any, error)
+	latestMetrics func(ctx context.Context, metric string) ([]map[string]any, error)
+	getState      func(ctx context.Context, key string) (string, error)
+}
+
 // main configures the HTTP server, routes, and shared dependencies.
 func main() {
 	baseURL := getenv("ECFR_BASE_URL", "https://www.ecfr.gov")
 	dataDir := getenv("DATA_DIR", "./data")
 	addr := getenv("ADDR", ":8080")
+	dailyHour := getenvInt("ECFR_DAILY_REFRESH_HOUR", 2)
 
 	if err := os.MkdirAll(filepath.Join(dataDir, "xml"), 0o755); err != nil {
 		log.Fatal(err)
@@ -45,25 +53,68 @@ func main() {
 	}
 
 	cli := ecfr.NewClient(baseURL, 120*time.Second)
+	var refreshMu sync.Mutex
+
+	deps := serverDeps{
+		refresh: func(ctx context.Context) (map[string]any, error) {
+			refreshMu.Lock()
+			result, err := refreshCurrent(ctx, cli, st)
+			refreshMu.Unlock()
+			return result, err
+		},
+		listAgencies: func(ctx context.Context) ([]map[string]any, error) {
+			return st.ListAgencies(ctx)
+		},
+		latestMetrics: func(ctx context.Context, metric string) ([]map[string]any, error) {
+			return st.LatestAgencyMetric(ctx, metric)
+		},
+		getState: func(ctx context.Context, key string) (string, error) {
+			return st.GetState(ctx, key)
+		},
+	}
 
 	// Run startup refresh in the background so server startup isn't blocked.
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 		defer cancel()
-		if _, err := refreshCurrent(ctx, cli, st); err != nil {
+		_, err := deps.refresh(ctx)
+		if err != nil {
 			log.Printf("startup refresh failed: %v", err)
 			return
 		}
-		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel2()
-		if err := metrics.ComputeLatest(ctx2, st); err != nil {
-			log.Printf("startup metrics compute failed: %v", err)
+	}()
+
+	// Daily refresh loop to pull new snapshots if available.
+	go func() {
+		for {
+			next := nextDailyRun(time.Now(), dailyHour)
+			timer := time.NewTimer(time.Until(next))
+			<-timer.C
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+			_, err := deps.refresh(ctx)
+			cancel()
+			if err != nil {
+				log.Printf("daily refresh failed: %v", err)
+			}
 		}
 	}()
 
 	// Static UI
+	mux := newMux("./web", deps)
+
+	log.Printf("Server started")
+	log.Printf("Listening on %s", addr)
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           withCORS(mux),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	log.Fatal(srv.ListenAndServe())
+}
+
+func newMux(webDir string, deps serverDeps) *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.Dir("./web")))
+	mux.Handle("/", http.FileServer(http.Dir(webDir)))
 
 	// Health
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +130,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
 		defer cancel()
 
-		result, err := refreshCurrent(ctx, cli, st)
+		result, err := deps.refresh(ctx)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
@@ -89,7 +140,7 @@ func main() {
 
 	// List agencies (from stored admin feed)
 	mux.HandleFunc("/api/agencies", func(w http.ResponseWriter, r *http.Request) {
-		ag, err := st.ListAgencies(r.Context())
+		ag, err := deps.listAgencies(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -104,7 +155,7 @@ func main() {
 		if metric == "" {
 			metric = "word_count"
 		}
-		rows, err := st.LatestAgencyMetric(r.Context(), metric)
+		rows, err := deps.latestMetrics(r.Context(), metric)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -112,14 +163,23 @@ func main() {
 		writeJSON(w, http.StatusOK, rows)
 	})
 
-	log.Printf("Server started")
-	log.Printf("Listening on %s", addr)
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           withCORS(mux),
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-	log.Fatal(srv.ListenAndServe())
+	// App state lookup
+	// /api/state?key=last_refresh
+	mux.HandleFunc("/api/state", func(w http.ResponseWriter, r *http.Request) {
+		key := r.URL.Query().Get("key")
+		if key == "" {
+			http.Error(w, "key required", http.StatusBadRequest)
+			return
+		}
+		value, err := deps.getState(r.Context(), key)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"key": key, "value": value})
+	})
+
+	return mux
 }
 
 // refreshCurrent downloads latest datasets, stores snapshots, and recomputes metrics.
@@ -195,67 +255,71 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 		workers = 8
 	}
 
-	log.Printf("ECFR INGEST: downloading snapshots (%d jobs, %d workers)", len(jobs), workers)
-	jobCh := make(chan job)
-	errCh = make(chan error, workers)
 	var downloaded int64
-	wg = sync.WaitGroup{}
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := range jobCh {
-				if ctx.Err() != nil {
-					return
-				}
-				var lastErr error
-				for attempt := 0; attempt < 3; attempt++ {
-					rc, err := cli.GetFullTitleXMLStream(ctx, j.date, j.title)
-					if err == nil {
-						err = st.SaveSnapshotFromReader(ctx, j.title, j.date, rc)
-						_ = rc.Close()
-					}
-					if err == nil {
-						atomic.AddInt64(&downloaded, 1)
-						lastErr = nil
-						break
-					}
-					lastErr = err
-					if !isRetryableDownloadErr(err) || attempt == 2 {
-						break
-					}
-					delay := time.Duration(2<<attempt) * time.Second
-					jitter := time.Duration(time.Now().UnixNano()%500) * time.Millisecond
-					t := time.NewTimer(delay + jitter)
-					select {
-					case <-ctx.Done():
-						t.Stop()
+	if len(jobs) == 0 {
+		log.Printf("ECFR INGEST: no new snapshots to download")
+	} else {
+		log.Printf("ECFR INGEST: downloading snapshots (%d jobs, %d workers)", len(jobs), workers)
+		jobCh := make(chan job)
+		errCh = make(chan error, workers)
+		wg = sync.WaitGroup{}
+		for i := 0; i < workers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for j := range jobCh {
+					if ctx.Err() != nil {
 						return
-					case <-t.C:
+					}
+					var lastErr error
+					for attempt := 0; attempt < 3; attempt++ {
+						rc, err := cli.GetFullTitleXMLStream(ctx, j.date, j.title)
+						if err == nil {
+							err = st.SaveSnapshotFromReader(ctx, j.title, j.date, rc)
+							_ = rc.Close()
+						}
+						if err == nil {
+							atomic.AddInt64(&downloaded, 1)
+							lastErr = nil
+							break
+						}
+						lastErr = err
+						if !isRetryableDownloadErr(err) || attempt == 2 {
+							break
+						}
+						delay := time.Duration(2<<attempt) * time.Second
+						jitter := time.Duration(time.Now().UnixNano()%500) * time.Millisecond
+						t := time.NewTimer(delay + jitter)
+						select {
+						case <-ctx.Done():
+							t.Stop()
+							return
+						case <-t.C:
+						}
+					}
+					if lastErr != nil {
+						log.Printf("ECFR INGEST: download failed (title=%d date=%s): %v; continuing", j.title, j.date, lastErr)
+						continue
 					}
 				}
-				if lastErr != nil {
-					log.Printf("ECFR INGEST: download failed (title=%d date=%s): %v; continuing", j.title, j.date, lastErr)
-					continue
-				}
-			}
-		}()
-	}
-sendLoop:
-	for _, j := range jobs {
-		select {
-		case <-ctx.Done():
-			break sendLoop
-		case jobCh <- j:
+			}()
 		}
-	}
-	close(jobCh)
-	wg.Wait()
-	log.Printf("ECFR INGEST: downloads complete (successfully downloaded=%d)", atomic.LoadInt64(&downloaded))
-	select {
-	case err := <-errCh:
-		log.Printf("ECFR INGEST: completed with download errors: %v", err)
-	default:
+	sendLoop:
+		for _, j := range jobs {
+			select {
+			case <-ctx.Done():
+				break sendLoop
+			case jobCh <- j:
+			}
+		}
+		close(jobCh)
+		wg.Wait()
+		log.Printf("ECFR INGEST: downloads complete (successfully downloaded=%d)", atomic.LoadInt64(&downloaded))
+		select {
+		case err := <-errCh:
+			log.Printf("ECFR INGEST: completed with download errors: %v", err)
+		default:
+		}
 	}
 
 	// 4) Compute metrics for the newest snapshot date per title, rolled up to agencies.
@@ -275,6 +339,18 @@ sendLoop:
 		"computed_at":  computedAt,
 		"last_refresh": computedAt,
 	}, nil
+}
+
+// nextDailyRun returns the next time at the given local hour.
+func nextDailyRun(now time.Time, hour int) time.Time {
+	if hour < 0 || hour > 23 {
+		hour = 2
+	}
+	next := time.Date(now.Year(), now.Month(), now.Day(), hour, 0, 0, 0, now.Location())
+	if !next.After(now) {
+		next = next.Add(24 * time.Hour)
+	}
+	return next
 }
 
 // getenv returns the environment variable or a default.

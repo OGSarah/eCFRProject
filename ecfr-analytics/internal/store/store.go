@@ -294,7 +294,26 @@ ON CONFLICT(agency_slug, issue_date, metric) DO UPDATE SET value_num=excluded.va
 
 func (s *Store) LatestAgencyMetric(ctx context.Context, metric string) ([]map[string]any, error) {
 	q := `
-SELECT m.agency_slug, a.name, m.issue_date, m.value_num, m.value_text
+SELECT
+  m.agency_slug,
+  a.name,
+  m.issue_date,
+  m.value_num,
+  m.value_text,
+  (SELECT m2.value_num
+     FROM agency_metrics m2
+    WHERE m2.agency_slug=m.agency_slug
+      AND m2.metric=m.metric
+      AND m2.issue_date < m.issue_date
+    ORDER BY m2.issue_date DESC
+    LIMIT 1) AS prev_num,
+  (SELECT m2.value_text
+     FROM agency_metrics m2
+    WHERE m2.agency_slug=m.agency_slug
+      AND m2.metric=m.metric
+      AND m2.issue_date < m.issue_date
+    ORDER BY m2.issue_date DESC
+    LIMIT 1) AS prev_text
 FROM agency_metrics m
 JOIN agencies a ON a.slug = m.agency_slug
 WHERE m.metric = ?
@@ -309,18 +328,35 @@ ORDER BY a.name
 	var out []map[string]any
 	for rows.Next() {
 		var slug, name, date string
-		var num sql.NullFloat64
-		var txt sql.NullString
-		if err := rows.Scan(&slug, &name, &date, &num, &txt); err != nil {
+		var num, prevNum sql.NullFloat64
+		var txt, prevTxt sql.NullString
+		if err := rows.Scan(&slug, &name, &date, &num, &txt, &prevNum, &prevTxt); err != nil {
 			return nil, err
 		}
 		o := map[string]any{"slug": slug, "name": name, "date": date}
 		if num.Valid {
 			o["value"] = num.Float64
+			if prevNum.Valid {
+				o["prev_value"] = prevNum.Float64
+				o["delta"] = num.Float64 - prevNum.Float64
+			} else {
+				o["prev_value"] = nil
+				o["delta"] = nil
+			}
 		} else if txt.Valid {
 			o["value"] = txt.String
+			if prevTxt.Valid {
+				o["prev_value"] = prevTxt.String
+				o["changed"] = txt.String != prevTxt.String
+			} else {
+				o["prev_value"] = nil
+				o["changed"] = nil
+			}
 		} else {
 			o["value"] = nil
+			o["prev_value"] = nil
+			o["delta"] = nil
+			o["changed"] = nil
 		}
 		out = append(out, o)
 	}

@@ -175,6 +175,37 @@
         color: #38d66b;
       }
 
+      .change-value {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .change-arrow {
+        display: inline-block;
+        width: 0;
+        height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+      }
+
+      .change-arrow.up {
+        border-bottom: 10px solid #38d66b;
+      }
+
+      .change-arrow.down {
+        border-top: 10px solid #ff5f5f;
+      }
+
+      .change-dash {
+        color: #3b82f6;
+        font-weight: 700;
+      }
+
+      .hidden {
+        display: none;
+      }
+
       .section {
         margin-top: 36px;
       }
@@ -356,7 +387,7 @@
           <h1>View federal regulations as decision-ready signals.</h1>
           <p class="lead">
             Explore the latest stored eCFR snapshots, agency metrics, and regulatory
-            footprint, change, and complexity in one place.
+            footprint and change in one place.
           </p>
           <div class="controls">
           </div>
@@ -409,18 +440,6 @@
 
       <section class="section fade-in delay-2">
         <div class="section-header">
-          <h2>Regulatory complexity</h2>
-        </div>
-        <div class="grid grid-2">
-          <div class="card">
-            <ul class="insight-list" id="readabilityLow"></ul>
-          </div>
-        </div>
-        <div class="subtle" style="margin-top: 8px;">* Sorted by lowest readability first.</div>
-      </section>
-
-      <section class="section fade-in delay-2">
-        <div class="section-header">
           <h2>Density extremes (words per chapter)</h2>
         </div>
         <div class="grid grid-2">
@@ -453,7 +472,8 @@
               <tr>
                 <th>Agency</th>
                 <th>Date</th>
-                <th>Metric value</th>
+                <th id="reviewValueHeader">Metric value</th>
+                <th id="reviewChangeHeader">Change</th>
               </tr>
             </thead>
             <tbody id="reviewTable"></tbody>
@@ -464,6 +484,7 @@
 
     <footer class="page">
       <div>Source: <a href="https://www.ecfr.gov/" target="_blank" rel="noopener">ecfr.gov</a></div>
+      <div>Last refresh: <span id="lastRefresh">--</span></div>
     </footer>
 
     <script src="app.js"></script>
