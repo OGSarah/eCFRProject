@@ -4,7 +4,7 @@
 The United States Federal Government has over 200,000 pages of federal regulations across ~150 main agencies, all of which can be found within the eCFR at https://www.ecfr.gov/. There is a public API for it.
 The goal of this assessment is to create a simple website to analyze Federal Regulations to allow for more digestible and actionable insights to be made on potential deregulation efforts across the government.
 
-## Project Requirements (from the prompt)
+## Project Requirements
 - Download the current eCFR data, store the data server-side, create APIs that can retrieve the stored data, and provide a UI to analyze it for items such as word count per agency, historical changes over time, and a checksum for each agency.
 - Only implement analysis that provides meaningful information to the user.
 - Add at least one custom metric that helps inform decision-making.
@@ -23,17 +23,18 @@ The goal of this assessment is to create a simple website to analyze Federal Reg
 
 ## Local Setup
 ### Prerequisites
-- Go 1.21+ (or your installed Go version that supports modules)
+- Go 1.25.6
 
 ### Install Dependencies
 ```bash
 go mod tidy
 ```
 
-### Run the Server (and Website)
+### Build and Run the Server (and Website)
 The server also serves the static website from `ecfr-analytics/web`.
 ```bash
 cd ecfr-analytics
+go build ./cmd/server
 go run ./cmd/server
 ```
 
@@ -51,25 +52,13 @@ By default it listens on `http://localhost:8080`.
 - `GET /api/metrics/latest?metric=word_count|words_per_chapter|checksum|churn|readability`
 - `GET /api/state?key=last_refresh`
 
-## Screenshots (HTML embed)
-Replace the `src` paths with your actual screenshot file locations.
-```html
-<img src="docs/screenshots/dashboard-1.png" alt="Agency metrics dashboard" width="900" />
-<img src="docs/screenshots/dashboard-2.png" alt="Metric detail view" width="900" />
-```
+## Screenshots
+<img src="screenshots/darkMode.png" alt="Dark Mode" width="900"
+<img src="screenshots/lightMode.png" alt="Light Mode" width="900"
 
-## Submission Checklist (from the prompt)
-- Zip file containing source code.
-- No more than 1,200 lines of code (excluding tests and auto-generated files).
-- Ensure the zip file can be extracted properly before sending.
-- Document including:
-  - Feedback on the assignment (including how your expertise/skillsets fit this assessment).
-  - Duration it took to complete.
-  - Link to frontend, if applicable.
-  - Screenshots of the UI.
-- Submit via KiteWorks by the recruiter-provided deadline.
 
-## Feedback (placeholder)
-- Expertise/skill fit: TODO
-- Duration: TODO
-- Frontend link: TODO
+## Feedback
+- Expertise/skill fit: I have worked on the backend side of things and also with javascripta bunch.
+- Duration: 8 hrs
+- I added more than the required number of code lines, I tried to limit it but I wanted the project to look polished.
+- I also wanted to add code comments since its pretty common to do in Go but I didn't want to add even more lines of code over the required number.
