@@ -351,20 +351,10 @@ function applyTheme(theme) {
 }
 
 function loadThemePreference() {
-  const stored = localStorage.getItem(themeKey);
-  if (stored === "light" || stored === "dark") return stored;
   return themeQuery.matches ? "dark" : "light";
 }
 
-function setThemePreference(theme) {
-  localStorage.setItem(themeKey, theme);
-  applyTheme(theme);
-  renderTopChart();
-  loadTimeseries();
-}
-
 function syncThemeFromSystem() {
-  if (localStorage.getItem(themeKey)) return;
   applyTheme(themeQuery.matches ? "dark" : "light");
   renderTopChart();
   loadTimeseries();
@@ -378,12 +368,8 @@ document.getElementById("reviewSearch").addEventListener("input", loadReviewTabl
 document.getElementById("agencySelect").addEventListener("change", loadTimeseries);
 document.getElementById("metricSelect").addEventListener("change", loadTimeseries);
 document.getElementById("daysSelect").addEventListener("change", loadTimeseries);
-document.getElementById("themeToggle").addEventListener("click", () => {
-  const current = document.documentElement.getAttribute("data-theme");
-  setThemePreference(current === "dark" ? "light" : "dark");
-});
-
 (async function init() {
+  localStorage.removeItem(themeKey);
   applyTheme(loadThemePreference());
   themeQuery.addEventListener("change", syncThemeFromSystem);
 
