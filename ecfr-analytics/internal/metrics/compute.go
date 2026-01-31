@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 
 	"ecfr-analytics/internal/ecfr"
@@ -57,6 +58,7 @@ func ComputeLatest(ctx context.Context, st *store.Store) error {
 		// collect all chapter texts that map to this agency
 		var allText string
 		chapterChecksums := []string{}
+		chapterSet := map[string]bool{}
 
 		for _, ref := range a.Raw.CFRReferences {
 			// If chapter missing, we cannot attribute precisely; skip (avoid misleading metrics).
@@ -79,6 +81,7 @@ func ComputeLatest(ctx context.Context, st *store.Store) error {
 			}
 			allText += txt + " "
 			chapterChecksums = append(chapterChecksums, ecfr.ChecksumHex(txt))
+			chapterSet[refKey(ref.Title, ref.Chapter)] = true
 		}
 
 		if allText == "" {
@@ -88,6 +91,14 @@ func ComputeLatest(ctx context.Context, st *store.Store) error {
 		// ---- Metrics that provide meaningful information ----
 		// Word count: “how much regulation text is this agency responsible for?”
 		wc := float64(ecfr.WordCount(allText))
+
+		// Custom metric: words per referenced chapter (regulatory density).
+		// Helps compare breadth vs depth of responsibility.
+		denom := len(chapterSet)
+		if denom == 0 {
+			denom = 1
+		}
+		wordsPerChapter := wc / float64(denom)
 
 		// Agency checksum: stable fingerprint to detect changes
 		sum := ecfr.ChecksumHex(allText)
@@ -103,6 +114,7 @@ func ComputeLatest(ctx context.Context, st *store.Store) error {
 		date := newestReferencedDate(a, titles)
 
 		_ = st.PutAgencyMetric(ctx, a.Slug, date, "word_count", &wc, nil)
+		_ = st.PutAgencyMetric(ctx, a.Slug, date, "words_per_chapter", &wordsPerChapter, nil)
 		_ = st.PutAgencyMetric(ctx, a.Slug, date, "checksum", nil, &sum)
 		_ = st.PutAgencyMetric(ctx, a.Slug, date, "readability", &fre, nil)
 		_ = st.PutAgencyMetric(ctx, a.Slug, date, "churn", &churn, nil)
@@ -123,7 +135,10 @@ func computeChurnBestEffort(
 	// Best effort: look up prior issue_date in snapshots table for each referenced title,
 	// compute checksum per referenced chapter and compare.
 	// If we can’t find a prior snapshot, churn = 0 for that title.
-	type pair struct{ title int; chapter string }
+	type pair struct {
+		title   int
+		chapter string
+	}
 	var refs []pair
 	for _, r := range a.Raw.CFRReferences {
 		if r.Chapter != "" {
@@ -286,4 +301,8 @@ func uniqueStrings(in []string) []string {
 		}
 	}
 	return out
+}
+
+func refKey(title int, chapter string) string {
+	return fmt.Sprintf("%d:%s", title, chapter)
 }

@@ -1,6 +1,18 @@
 const API = (path) => path; // same-origin
 
-let wcChart, churnChart, tsChart;
+const metricLabels = {
+  word_count: "Word count",
+  churn: "Churn rate",
+  readability: "Readability",
+  words_per_chapter: "Words per chapter",
+  checksum: "Checksum",
+};
+
+const metricsCache = new Map();
+let topChart = null;
+let tsChart = null;
+
+const numberFmt = new Intl.NumberFormat("en-US");
 
 async function jget(path) {
   const res = await fetch(API(path));
@@ -14,20 +26,56 @@ async function jpost(path) {
   return res.json();
 }
 
-function ensureChart(canvasId, cfg, chartRefSetter) {
-  const ctx = document.getElementById(canvasId);
-  if (!ctx) return null;
-  const chart = new Chart(ctx, cfg);
-  chartRefSetter(chart);
-  return chart;
+function fmtNumber(value) {
+  if (typeof value !== "number") return "--";
+  return numberFmt.format(Math.round(value));
 }
 
-function topN(rows, n = 20) {
-  // rows: {name, value}
-  return [...rows]
-    .filter(r => typeof r.value === "number")
-    .sort((a, b) => b.value - a.value)
-    .slice(0, n);
+function fmtPercent(value) {
+  if (typeof value !== "number") return "--";
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function fmtScore(value) {
+  if (typeof value !== "number") return "--";
+  return value.toFixed(1);
+}
+
+function formatValue(metric, value) {
+  switch (metric) {
+    case "word_count":
+      return fmtNumber(value);
+    case "words_per_chapter":
+      return fmtNumber(value);
+    case "churn":
+      return fmtPercent(value);
+    case "readability":
+      return fmtScore(value);
+    default:
+      return String(value ?? "--");
+  }
+}
+
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+async function loadLatest(metric) {
+  if (metricsCache.has(metric)) return metricsCache.get(metric);
+  const rows = await jget(`/api/metrics/latest?metric=${encodeURIComponent(metric)}`);
+  metricsCache.set(metric, rows);
+  return rows;
+}
+
+async function loadAllLatest() {
+  await Promise.all([
+    loadLatest("word_count"),
+    loadLatest("churn"),
+    loadLatest("readability"),
+    loadLatest("words_per_chapter"),
+    loadLatest("checksum"),
+  ]);
 }
 
 async function loadAgencies() {
@@ -40,59 +88,94 @@ async function loadAgencies() {
     opt.textContent = a.name;
     sel.appendChild(opt);
   }
-  sel.addEventListener("change", () => loadTimeseries());
-  document.getElementById("metricSelect").addEventListener("change", () => loadTimeseries());
-  document.getElementById("daysSelect").addEventListener("change", () => loadTimeseries());
+  setText("statAgencies", numberFmt.format(agencies.length));
 }
 
-async function refresh() {
-  const out = document.getElementById("refreshOut");
-  out.textContent = "Running...";
-  try {
-    const r = await jpost("/api/refresh");
-    out.textContent = JSON.stringify(r, null, 2);
-    await loadLatestCharts();
-    await loadTimeseries();
-    await loadChecksums();
-  } catch (e) {
-    out.textContent = String(e);
+function sumMetric(rows) {
+  return rows.reduce((acc, r) => acc + (typeof r.value === "number" ? r.value : 0), 0);
+}
+
+function avgMetric(rows) {
+  const nums = rows.filter((r) => typeof r.value === "number");
+  if (!nums.length) return 0;
+  return nums.reduce((acc, r) => acc + r.value, 0) / nums.length;
+}
+
+function latestDate(rows) {
+  const dates = rows.map((r) => r.date).filter(Boolean).sort();
+  return dates.length ? dates[dates.length - 1] : "--";
+}
+
+async function updateSummary() {
+  const wcRows = await loadLatest("word_count");
+  const churnRows = await loadLatest("churn");
+  const readRows = await loadLatest("readability");
+  const wpcRows = await loadLatest("words_per_chapter");
+
+  setText("statTotalWords", fmtNumber(sumMetric(wcRows)));
+  setText("statReadability", fmtScore(avgMetric(readRows)));
+  setText("statLatestDate", latestDate(wcRows));
+  setText("statChurn", fmtPercent(avgMetric(churnRows)));
+  setText("statWordsPerChapter", fmtNumber(avgMetric(wpcRows)));
+  setText("statCoverage", numberFmt.format(wcRows.length));
+}
+
+function topN(rows, n = 12) {
+  return [...rows]
+    .filter((r) => typeof r.value === "number")
+    .sort((a, b) => b.value - a.value)
+    .slice(0, n);
+}
+
+function chartColor(metric) {
+  switch (metric) {
+    case "churn":
+      return "#f1b24a";
+    case "readability":
+      return "#3d9a7b";
+    case "words_per_chapter":
+      return "#1c6e8c";
+    default:
+      return "#0f1b2d";
   }
 }
 
-async function loadLatestCharts() {
-  const wcRows = await jget("/api/metrics/latest?metric=word_count");
-  const churnRows = await jget("/api/metrics/latest?metric=churn");
+async function renderTopChart() {
+  const metric = document.getElementById("topMetricSelect").value;
+  const rows = await loadLatest(metric);
+  const top = topN(rows, 12);
 
-  const wcTop = topN(wcRows, 15);
-  const churnTop = topN(churnRows, 15);
+  setText("topChartTitle", `Top agencies by ${metricLabels[metric] ?? metric}`);
 
-  const wcCfg = {
+  const cfg = {
     type: "bar",
     data: {
-      labels: wcTop.map(r => r.name),
-      datasets: [{ label: "Word count", data: wcTop.map(r => r.value) }]
-    },
-    options: { responsive: true, plugins: { legend: { display: false } } }
-  };
-
-  const churnCfg = {
-    type: "bar",
-    data: {
-      labels: churnTop.map(r => r.name),
-      datasets: [{ label: "Churn rate", data: churnTop.map(r => r.value) }]
+      labels: top.map((r) => r.name),
+      datasets: [{
+        label: metricLabels[metric] ?? metric,
+        data: top.map((r) => r.value),
+        backgroundColor: chartColor(metric),
+      }],
     },
     options: {
       responsive: true,
-      scales: { y: { suggestedMin: 0, suggestedMax: 1 } },
-      plugins: { legend: { display: false } }
-    }
+      plugins: { legend: { display: false } },
+      scales: {
+        y: {
+          ticks: {
+            callback: (val) => {
+              if (metric === "churn") return `${(val * 100).toFixed(0)}%`;
+              return numberFmt.format(val);
+            },
+          },
+        },
+        x: { ticks: { autoSkip: false, maxRotation: 40, minRotation: 20 } },
+      },
+    },
   };
 
-  if (wcChart) wcChart.destroy();
-  if (churnChart) churnChart.destroy();
-
-  wcChart = new Chart(document.getElementById("wcChart"), wcCfg);
-  churnChart = new Chart(document.getElementById("churnChart"), churnCfg);
+  if (topChart) topChart.destroy();
+  topChart = new Chart(document.getElementById("topChart"), cfg);
 }
 
 async function loadTimeseries() {
@@ -102,45 +185,144 @@ async function loadTimeseries() {
   const metric = document.getElementById("metricSelect").value;
   const days = document.getElementById("daysSelect").value;
 
-  const rows = await jget(`/api/metrics/agency/${encodeURIComponent(slug)}/timeseries?metric=${encodeURIComponent(metric)}&days=${encodeURIComponent(days)}`);
-  const data = [...rows].reverse(); // oldest -> newest
+  const rows = await jget(
+    `/api/metrics/agency/${encodeURIComponent(slug)}/timeseries?metric=${encodeURIComponent(metric)}&days=${encodeURIComponent(days)}`
+  );
+  const data = [...rows].reverse();
 
   const cfg = {
     type: "line",
     data: {
-      labels: data.map(r => r.date),
-      datasets: [{ label: metric, data: data.map(r => r.value) }]
+      labels: data.map((r) => r.date),
+      datasets: [{
+        label: metricLabels[metric] ?? metric,
+        data: data.map((r) => r.value),
+        borderColor: chartColor(metric),
+        backgroundColor: "rgba(28, 110, 140, 0.15)",
+        fill: true,
+        tension: 0.3,
+      }],
     },
-    options: { responsive: true, plugins: { legend: { display: true } } }
+    options: {
+      responsive: true,
+      plugins: { legend: { display: true } },
+    },
   };
 
   if (tsChart) tsChart.destroy();
   tsChart = new Chart(document.getElementById("tsChart"), cfg);
 
-  document.getElementById("agencyMeta").textContent =
-    `slug: ${slug} • points: ${data.length}`;
+  setText("agencyMeta", `slug: ${slug} • points: ${data.length}`);
+  updateAgencyCards(slug);
 }
 
-async function loadChecksums() {
-  const rows = await jget("/api/metrics/latest?metric=checksum");
-  const tbody = document.getElementById("checksumTable");
+function findMetricValue(metric, slug) {
+  const rows = metricsCache.get(metric) || [];
+  const row = rows.find((r) => r.slug === slug);
+  return row ? row.value : null;
+}
+
+function updateAgencyCards(slug) {
+  setText("agencyWordCount", formatValue("word_count", findMetricValue("word_count", slug)));
+  setText("agencyChurn", formatValue("churn", findMetricValue("churn", slug)));
+  setText("agencyReadability", formatValue("readability", findMetricValue("readability", slug)));
+  setText("agencyWordsPerChapter", formatValue("words_per_chapter", findMetricValue("words_per_chapter", slug)));
+}
+
+async function loadReviewTable() {
+  const metric = document.getElementById("reviewMetricSelect").value;
+  const search = document.getElementById("reviewSearch").value.trim().toLowerCase();
+  const rows = await loadLatest(metric);
+
+  let filtered = rows;
+  if (search) {
+    filtered = rows.filter((r) => r.name.toLowerCase().includes(search));
+  }
+
+  const numeric = filtered.filter((r) => typeof r.value === "number");
+  const nonNumeric = filtered.filter((r) => typeof r.value !== "number");
+
+  numeric.sort((a, b) => b.value - a.value);
+  nonNumeric.sort((a, b) => a.name.localeCompare(b.name));
+
+  const ordered = [...numeric, ...nonNumeric].slice(0, 200);
+
+  const tbody = document.getElementById("reviewTable");
   tbody.innerHTML = "";
-  for (const r of rows.slice(0, 50)) {
+  for (const r of ordered) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.date)}</td><td><code>${escapeHtml(String(r.value))}</code></td>`;
+    const value = metric === "checksum" ? `<code>${escapeHtml(String(r.value ?? ""))}</code>` : escapeHtml(formatValue(metric, r.value));
+    tr.innerHTML = `<td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.date)}</td><td>${value}</td>`;
     tbody.appendChild(tr);
   }
 }
 
+async function refresh() {
+  setText("refreshOut", "Running refresh. This can take several minutes...");
+  setText("refreshState", "Refreshing");
+  try {
+    const r = await jpost("/api/refresh");
+    metricsCache.clear();
+    await loadAllLatest();
+    await updateSummary();
+    await renderTopChart();
+    await loadTimeseries();
+    await loadReviewTable();
+
+    setText("refreshOut", `Updated ${r.computed_at} • ${r.downloaded} new snapshots`);
+    setText("refreshState", "Refresh complete");
+  } catch (e) {
+    setText("refreshOut", String(e));
+    setText("refreshState", "Refresh failed");
+  }
+}
+
+function exportCsv() {
+  const metric = document.getElementById("reviewMetricSelect").value;
+  const rows = metricsCache.get(metric) || [];
+  const header = ["agency", "date", metric];
+  const lines = [header.join(",")];
+
+  for (const r of rows) {
+    const value = r.value == null ? "" : String(r.value).replaceAll("\"", "\"\"");
+    lines.push(`"${r.name}","${r.date}","${value}"`);
+  }
+
+  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `ecfr-${metric}-latest.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function escapeHtml(s) {
-  return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 document.getElementById("refreshBtn").addEventListener("click", refresh);
+document.getElementById("exportCsvBtn").addEventListener("click", exportCsv);
+document.getElementById("topMetricSelect").addEventListener("change", renderTopChart);
+document.getElementById("reviewMetricSelect").addEventListener("change", loadReviewTable);
+document.getElementById("reviewSearch").addEventListener("input", loadReviewTable);
+document.getElementById("agencySelect").addEventListener("change", loadTimeseries);
+document.getElementById("metricSelect").addEventListener("change", loadTimeseries);
+document.getElementById("daysSelect").addEventListener("change", loadTimeseries);
 
 (async function init() {
+  Chart.defaults.color = "#0f1b2d";
+  Chart.defaults.font.family = '"IBM Plex Sans", "Helvetica Neue", Arial, sans-serif';
+
   await loadAgencies();
-  await loadLatestCharts();
-  await loadChecksums();
+  await loadAllLatest();
+  await updateSummary();
+  await renderTopChart();
+  await loadReviewTable();
   await loadTimeseries();
 })();

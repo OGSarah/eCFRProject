@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS agency_metrics (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   agency_slug TEXT NOT NULL,
   issue_date TEXT NOT NULL,
-  metric TEXT NOT NULL,              -- word_count, checksum, churn, readability
+  metric TEXT NOT NULL,              -- word_count, words_per_chapter, checksum, churn, readability
   value_num REAL,                    -- numeric metrics
   value_text TEXT,                   -- e.g., checksum
   created_at TEXT NOT NULL,

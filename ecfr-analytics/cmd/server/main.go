@@ -77,7 +77,7 @@ func main() {
 	})
 
 	// Latest metrics for all agencies
-	// /api/metrics/latest?metric=word_count|checksum|churn|readability
+	// /api/metrics/latest?metric=word_count|words_per_chapter|checksum|churn|readability
 	mux.HandleFunc("/api/metrics/latest", func(w http.ResponseWriter, r *http.Request) {
 		metric := r.URL.Query().Get("metric")
 		if metric == "" {
@@ -92,7 +92,7 @@ func main() {
 	})
 
 	// Timeseries per agency
-	// /api/metrics/agency/{slug}/timeseries?metric=word_count|churn|readability&days=180
+	// /api/metrics/agency/{slug}/timeseries?metric=word_count|words_per_chapter|churn|readability&days=180
 	mux.HandleFunc("/api/metrics/agency/", func(w http.ResponseWriter, r *http.Request) {
 		// naive router
 		path := r.URL.Path
