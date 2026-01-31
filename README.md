@@ -42,3 +42,4 @@ go run ./cmd/server
 ### Important features I added:
 - Dark mode/Light mode is set on the website according to system settings.
 - Tested on Chrome, Safari, Firefox, add more
+- I would have added Go style code comments to each function and struct but I didn't want to surpass the 1200 line limit.
