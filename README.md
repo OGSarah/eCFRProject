@@ -2,13 +2,7 @@
 
 ## Purpose
 The United States Federal Government has over 200,000 pages of federal regulations across ~150 main agencies, all of which can be found within the eCFR at https://www.ecfr.gov/. There is a public API for it.
-The goal of this assessment is to create a simple website to analyze Federal Regulations to allow for more digestible and actionable insights to be made on potential deregulation efforts across the government.
-
-## Project Requirements
-- Download the current eCFR data, store the data server-side, create APIs that can retrieve the stored data, and provide a UI to analyze it for items such as word count per agency, historical changes over time, and a checksum for each agency.
-- Only implement analysis that provides meaningful information to the user.
-- Add at least one custom metric that helps inform decision-making.
-- Provide a way for users to review results.
+The goal of this project is to create a simple website to analyze Federal Regulations to allow for more digestible and actionable insights to be made on potential deregulation efforts across the government.
 
 ## What This Project Implements
 - Data ingestion from the eCFR API and storage in a local SQLite database and gzip-compressed XML snapshots.
@@ -51,11 +45,10 @@ By default it listens on `http://localhost:8080`.
 |----------|------------|
 | <img src="screenshots/darkMode.png" width="450"/> | <img src="screenshots/lightMode.png" width="450"/> |
 
+## License
 
+Proprietary Software
 
+© 2026 SarahUniverse
 
-## Feedback
-- Expertise/skill fit: My background spans Go backends, REST/HTTP APIs, data processing, and security-focused delivery, alongside years of building user-facing products. This project aligns with my experience designing services, storing and analyzing data, and presenting it in clear UIs. I’ve shipped and maintained production systems, built automation and tests, and worked across Swift, Java, JavaScript, and Go—skills that map directly to delivering a clean, end-to-end analytics app.
-- Duration: 8 hrs
-- I added more than the required number of lines of code. I tried to limit it, but I wanted the project to look polished. 
-- I wanted to add code comments, since it’s pretty common to do so in Go, but I didn’t want to increase the line count even further beyond the requirement.
+This software and its source code are the exclusive property of SarahUniverse. No part of this software may be reproduced, distributed, or transmitted in any form or by any means without prior written permission.
