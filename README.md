@@ -34,3 +34,6 @@ go build ./cmd/server
 ```bash
 go run ./cmd/server
 ```
+
+### Important features I added
+- Dark mode/Light mode is set on the website according to system settings.
