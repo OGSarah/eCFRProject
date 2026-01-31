@@ -141,26 +141,28 @@ async function loadStatus() {
   setText("lastRefresh", fmtDateTime(status.last_refresh));
 }
 
-async function renderFocusPills() {
-  const wrap = document.getElementById("focusPills");
-  if (!wrap) return;
-  const rows = await loadLatest("word_count");
-  const top = topN(rows, 5);
-  wrap.innerHTML = "";
-
-  for (const [idx, r] of top.entries()) {
-    const pill = document.createElement("span");
-    pill.className = "pill";
-    pill.textContent = `${idx + 1}. ${r.name}`;
-    wrap.appendChild(pill);
-  }
-}
-
 function topN(rows, n = 12) {
   return [...rows]
     .filter((r) => typeof r.value === "number")
     .sort((a, b) => b.value - a.value)
     .slice(0, n);
+}
+
+function bottomN(rows, n = 5) {
+  return [...rows]
+    .filter((r) => typeof r.value === "number")
+    .sort((a, b) => a.value - b.value)
+    .slice(0, n);
+}
+
+function minDate(rows) {
+  const dates = rows.map((r) => r.date).filter(Boolean).sort();
+  return dates.length ? dates[0] : "--";
+}
+
+function maxDate(rows) {
+  const dates = rows.map((r) => r.date).filter(Boolean).sort();
+  return dates.length ? dates[dates.length - 1] : "--";
 }
 
 function chartColor(metric) {
@@ -230,6 +232,42 @@ async function renderTopChart() {
 
   if (topChart) topChart.destroy();
   topChart = new Chart(document.getElementById("topChart"), cfg);
+}
+
+function renderInsightList(el, rows, fmt) {
+  el.innerHTML = "";
+  for (const r of rows) {
+    const li = document.createElement("li");
+    li.className = "insight-item";
+    li.innerHTML = `<strong>${escapeHtml(r.name)}</strong><span class="insight-value">${escapeHtml(fmt(r.value))}</span>`;
+    el.appendChild(li);
+  }
+}
+
+async function renderInsights() {
+  const readRows = await loadLatest("readability");
+  const wcRows = await loadLatest("word_count");
+  const wpcRows = await loadLatest("words_per_chapter");
+
+  const readList = document.getElementById("readabilityLow");
+  if (readList) {
+    renderInsightList(readList, bottomN(readRows, 5), fmtScore);
+  }
+
+  const densityList = document.getElementById("densityExtremes");
+  if (densityList) {
+    const highest = topN(wpcRows, 3);
+    const lowest = bottomN(wpcRows, 3);
+    renderInsightList(densityList, [...highest, ...lowest], fmtNumber);
+  }
+}
+
+async function renderGrowthHotspots() {
+  const list = document.getElementById("growthHotspots");
+  if (!list) return;
+  const rows = await jget("/api/insights/growth?days=365");
+  const display = rows.map((r) => ({ name: r.agency, value: r.delta }));
+  renderInsightList(list, display, fmtNumber);
 }
 
 async function loadTimeseries() {
@@ -311,7 +349,10 @@ async function loadReviewTable() {
   tbody.innerHTML = "";
   for (const r of ordered) {
     const tr = document.createElement("tr");
-    const value = metric === "checksum" ? `<code>${escapeHtml(String(r.value ?? ""))}</code>` : escapeHtml(formatValue(metric, r.value));
+    const isChecksum = metric === "checksum";
+    const value = isChecksum
+      ? `<code>${escapeHtml(String(r.value ?? ""))}</code>`
+      : `<span class="highlight-green">${escapeHtml(formatValue(metric, r.value))}</span>`;
     tr.innerHTML = `<td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.date)}</td><td>${value}</td>`;
     tbody.appendChild(tr);
   }
@@ -325,7 +366,8 @@ async function refresh() {
     metricsCache.clear();
     await loadAllLatest();
     await updateSummary();
-    await renderFocusPills();
+    await renderInsights();
+    await renderGrowthHotspots();
     await renderTopChart();
     await loadTimeseries();
     await loadReviewTable();
@@ -396,6 +438,8 @@ function syncThemeFromSystem() {
   applyTheme(themeQuery.matches ? "dark" : "light");
   renderTopChart();
   loadTimeseries();
+  renderInsights();
+  renderGrowthHotspots();
 }
 
 document.getElementById("refreshBtn").addEventListener("click", refresh);
@@ -415,7 +459,8 @@ document.getElementById("daysSelect").addEventListener("change", loadTimeseries)
   await loadAllLatest();
   await updateSummary();
   await loadStatus();
-  await renderFocusPills();
+  await renderInsights();
+  await renderGrowthHotspots();
   await renderTopChart();
   await loadReviewTable();
   await loadTimeseries();

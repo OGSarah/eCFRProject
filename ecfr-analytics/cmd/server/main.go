@@ -82,6 +82,37 @@ func main() {
 		writeJSON(w, http.StatusOK, ag)
 	})
 
+	// Insights: outlier chapters for a selected agency.
+	mux.HandleFunc("/api/insights/outliers", func(w http.ResponseWriter, r *http.Request) {
+		slug := r.URL.Query().Get("slug")
+		if slug == "" {
+			http.Error(w, "slug required", http.StatusBadRequest)
+			return
+		}
+		outliers, err := metrics.OutlierChaptersByAgency(r.Context(), st, slug, 5)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, outliers)
+	})
+
+	// Insights: growth hotspots for a window.
+	mux.HandleFunc("/api/insights/growth", func(w http.ResponseWriter, r *http.Request) {
+		days := 365
+		if v := r.URL.Query().Get("days"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 3650 {
+				days = n
+			}
+		}
+		out, err := metrics.GrowthHotspots(r.Context(), st, days, 5)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	})
+
 	// Status / metadata
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		lastRefresh, err := st.GetState(r.Context(), "last_refresh")

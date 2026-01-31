@@ -14,39 +14,43 @@
       :root {
         --ink: #0f1b2d;
         --ink-muted: #546070;
-        --surface: #f8f4ef;
+        --surface: #f6f7f9;
         --panel: #ffffff;
-        --panel-soft: #f2ede6;
+        --panel-soft: #f1f2f6;
         --accent: #1c6e8c;
         --accent-2: #f1b24a;
         --accent-3: #3d9a7b;
-        --stroke: #e4dcd3;
-        --table-line: #eee2d7;
-        --shadow: 0 20px 45px rgba(15, 27, 45, 0.12);
-        --bg-start: #fffaf2;
-        --bg-mid: #f6efe6;
-        --bg-end: #f3ece4;
+        --stroke: rgba(15, 27, 45, 0.12);
+        --table-line: rgba(15, 27, 45, 0.08);
+        --shadow: 0 18px 40px rgba(15, 27, 45, 0.12);
+        --bg-start: #f7f8fb;
+        --bg-mid: #f2f4f7;
+        --bg-end: #eef1f6;
         --chart-grid: rgba(15, 27, 45, 0.08);
-        --chart-fill: rgba(28, 110, 140, 0.15);
+        --chart-fill: rgba(28, 110, 140, 0.12);
+        --row-bg: #eef2f8;
+        --row-bg-alt: #e2e8f1;
       }
 
       :root[data-theme="dark"] {
-        --ink: #edf2f7;
-        --ink-muted: #b3c0d1;
-        --surface: #0f141c;
-        --panel: #151c26;
-        --panel-soft: #1b2430;
-        --accent: #69b6d1;
+        --ink: #eef3fb;
+        --ink-muted: #a8b4c7;
+        --surface: #0b0f16;
+        --panel: #121824;
+        --panel-soft: #171f2c;
+        --accent: #7aa4ff;
         --accent-2: #f1b24a;
-        --accent-3: #54c29b;
-        --stroke: #2b3848;
-        --table-line: #243140;
-        --shadow: 0 28px 60px rgba(2, 6, 12, 0.5);
-        --bg-start: #0b1118;
-        --bg-mid: #0e1620;
-        --bg-end: #0f141c;
-        --chart-grid: rgba(237, 242, 247, 0.12);
-        --chart-fill: rgba(105, 182, 209, 0.2);
+        --accent-3: #66c2a0;
+        --stroke: rgba(255, 255, 255, 0.08);
+        --table-line: rgba(255, 255, 255, 0.06);
+        --shadow: 0 28px 60px rgba(0, 0, 0, 0.45);
+        --bg-start: #0b0f16;
+        --bg-mid: #0c111a;
+        --bg-end: #0e1420;
+        --chart-grid: rgba(255, 255, 255, 0.12);
+        --chart-fill: rgba(122, 164, 255, 0.18);
+        --row-bg: #182233;
+        --row-bg-alt: #101826;
       }
 
       * { box-sizing: border-box; }
@@ -59,9 +63,9 @@
       }
 
       .page {
-        max-width: 1200px;
+        max-width: 1180px;
         margin: 0 auto;
-        padding: 32px 24px 80px;
+        padding: 36px 24px 80px;
       }
 
       .hero {
@@ -69,10 +73,10 @@
         gap: 24px;
         grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
         align-items: center;
-        background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, transparent), color-mix(in srgb, var(--accent-2) 16%, transparent));
-        border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
-        border-radius: 24px;
-        padding: 18px 30px 28px;
+        background: var(--panel);
+        border: 1px solid var(--stroke);
+        border-radius: 18px;
+        padding: 22px 30px 30px;
         box-shadow: var(--shadow);
         position: relative;
         overflow: hidden;
@@ -87,21 +91,21 @@
         text-transform: uppercase;
         letter-spacing: 0.2em;
         font-size: 12px;
-        color: var(--accent);
-        font-weight: 600;
+        color: var(--ink-muted);
+        font-weight: 700;
         margin-top: -100px;
         margin-bottom: 20px;
         padding-top: 18px;
       }
 
       h1, h2, h3 {
-        font-family: "Fraunces", "Georgia", serif;
+        font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
         margin: 0;
       }
 
-      h1 { font-size: clamp(28px, 4vw, 42px); margin-bottom: 18px; }
-      h2 { font-size: 22px; }
-      h3 { font-size: 18px; }
+      h1 { font-size: clamp(28px, 4vw, 40px); font-weight: 700; letter-spacing: -0.02em; margin-bottom: 18px; }
+      h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+      h3 { font-size: 17px; font-weight: 600; }
 
       .lead {
         font-size: 16px;
@@ -112,7 +116,7 @@
 
       .btn {
         padding: 12px 18px;
-        border-radius: 999px;
+        border-radius: 10px;
         border: 1px solid var(--accent);
         background: var(--accent);
         color: #fff;
@@ -121,7 +125,7 @@
         transition: transform 0.2s ease, box-shadow 0.2s ease;
       }
 
-      .btn:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(28, 110, 140, 0.18); }
+      .btn:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
 
       .btn-secondary {
         background: transparent;
@@ -144,9 +148,9 @@
       .card {
         background: var(--panel);
         border: 1px solid var(--stroke);
-        border-radius: 20px;
+        border-radius: 16px;
         padding: 18px 20px;
-        box-shadow: 0 14px 24px rgba(15, 27, 45, 0.08);
+        box-shadow: 0 10px 24px rgba(15, 27, 45, 0.08);
       }
 
       .stat {
@@ -158,12 +162,17 @@
       .stat span {
         font-size: 12px;
         text-transform: uppercase;
-        letter-spacing: 0.12em;
+        letter-spacing: 0.1em;
         color: var(--ink-muted);
       }
 
       .stat strong {
-        font-size: 22px;
+        font-size: 28px;
+        font-weight: 700;
+      }
+
+      .highlight-green {
+        color: #38d66b;
       }
 
       .section {
@@ -195,23 +204,48 @@
 
       select, input {
         padding: 10px 12px;
-        border-radius: 12px;
+        border-radius: 10px;
         border: 1px solid var(--stroke);
         background: var(--panel);
         color: var(--ink);
         font-size: 14px;
       }
 
+      .pill-filter {
+        border-radius: 999px;
+        background: var(--panel-soft);
+        font-weight: 600;
+      }
+
       table {
         width: 100%;
-        border-collapse: collapse;
+        border-collapse: separate;
+        border-spacing: 0 8px;
         font-size: 14px;
       }
 
       th, td {
         text-align: left;
         padding: 10px 8px;
-        border-bottom: 1px solid var(--table-line);
+        border-bottom: none;
+      }
+
+      tbody tr {
+        background: var(--row-bg);
+      }
+
+      tbody tr:nth-child(even) {
+        background: var(--row-bg-alt);
+      }
+
+      tbody td:first-child {
+        border-top-left-radius: 10px;
+        border-bottom-left-radius: 10px;
+      }
+
+      tbody td:last-child {
+        border-top-right-radius: 10px;
+        border-bottom-right-radius: 10px;
       }
 
       th {
@@ -234,8 +268,9 @@
         gap: 6px;
         padding: 6px 10px;
         border-radius: 999px;
-        background: var(--panel-soft);
-        color: var(--ink-muted);
+        background: transparent;
+        border: 1px solid var(--stroke);
+        color: var(--ink);
         font-size: 12px;
       }
 
@@ -243,13 +278,50 @@
         display: flex;
         flex-direction: column;
         gap: 12px;
-        min-height: 280px;
+        min-height: 300px;
       }
 
       .chart-card canvas {
         width: 100% !important;
-        height: 220px !important;
-        max-height: 240px;
+        height: 240px !important;
+        max-height: 260px;
+      }
+
+      .insight-list {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        font-size: 15px;
+      }
+
+      .insight-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: var(--row-bg);
+      }
+
+      .insight-item strong {
+        font-size: 15px;
+      }
+
+      .insight-item span {
+        color: var(--ink-muted);
+      }
+
+      .insight-value {
+        color: var(--accent);
+        font-weight: 700;
+        font-size: 18px;
+      }
+
+      .insight-meta {
+        font-size: 12px;
+        color: var(--ink-muted);
       }
 
       footer {
@@ -305,15 +377,15 @@
         <div class="grid grid-2">
           <div class="card stat">
             <span>Agencies tracked</span>
-            <strong id="statAgencies">--</strong>
+            <strong id="statAgencies" class="highlight-green">--</strong>
           </div>
           <div class="card stat">
             <span>Total words</span>
-            <strong id="statTotalWords">--</strong>
+            <strong id="statTotalWords" class="highlight-green">--</strong>
           </div>
           <div class="card stat">
             <span>Average readability</span>
-            <strong id="statReadability">--</strong>
+            <strong id="statReadability" class="highlight-green">--</strong>
           </div>
           <div class="card stat">
             <span>Latest issue date</span>
@@ -321,16 +393,6 @@
           </div>
         </div>
       </header>
-
-      <section class="section fade-in delay-1">
-        <div class="section-header">
-          <div>
-            <h2>Suggested Agencies to begin with</h2>
-            <p class="subtle">Top 5 agencies by latest word count.</p>
-          </div>
-          <div class="controls" id="focusPills"></div>
-        </div>
-      </section>
 
       <section class="section fade-in delay-2">
         <div class="section-header">
@@ -342,18 +404,52 @@
         <div class="grid grid-3">
           <div class="card stat">
             <span>Average churn rate</span>
-            <strong id="statChurn">--</strong>
+            <strong id="statChurn" class="highlight-green">--</strong>
             <div class="subtle">Share of referenced chapters that changed vs prior snapshot.</div>
           </div>
           <div class="card stat">
             <span>Words per chapter</span>
-            <strong id="statWordsPerChapter">--</strong>
+            <strong id="statWordsPerChapter" class="highlight-green">--</strong>
             <div class="subtle">Custom metric for depth vs breadth.</div>
           </div>
           <div class="card stat">
             <span>Agencies with data</span>
-            <strong id="statCoverage">--</strong>
+            <strong id="statCoverage" class="highlight-green">--</strong>
             <div class="subtle">Agencies with current metrics stored.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section fade-in delay-2">
+        <div class="section-header">
+          <h2>Latest movement + complexity</h2>
+        </div>
+        <div class="grid grid-2">
+          <div class="card">
+            <ul class="insight-list" id="readabilityLow"></ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="section fade-in delay-2">
+        <div class="section-header">
+          <h2>Density extremes (words per chapter)</h2>
+        </div>
+        <div class="grid grid-2">
+          <div class="card">
+            <ul class="insight-list" id="densityExtremes"></ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="section fade-in delay-2">
+        <div class="section-header">
+          <h2>Growth hotspots</h2>
+        </div>
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="insight-meta">Largest increases over the last 365 days.</div>
+            <ul class="insight-list" id="growthHotspots"></ul>
           </div>
         </div>
       </section>
@@ -362,7 +458,7 @@
         <div class="section-header">
           <h2>Top agencies (latest)</h2>
           <div class="controls">
-            <select id="topMetricSelect">
+            <select id="topMetricSelect" class="pill-filter">
               <option value="word_count">Word count</option>
               <option value="churn">Churn rate</option>
               <option value="readability">Readability</option>
@@ -385,14 +481,14 @@
         <div class="grid">
           <div class="card chart-card">
             <div class="controls trendline-controls">
-              <select id="agencySelect"></select>
-              <select id="metricSelect">
+              <select id="agencySelect" class="pill-filter"></select>
+              <select id="metricSelect" class="pill-filter">
                 <option value="word_count">Word count</option>
                 <option value="churn">Churn rate</option>
                 <option value="readability">Readability</option>
                 <option value="words_per_chapter">Words per chapter</option>
               </select>
-              <select id="daysSelect">
+              <select id="daysSelect" class="pill-filter">
                 <option value="30">30 days</option>
                 <option value="180" selected>180 days</option>
                 <option value="365">365 days</option>
@@ -403,19 +499,19 @@
             <div class="grid grid-2" style="margin-top: 12px;">
               <div class="card stat">
                 <span>Word count</span>
-                <strong id="agencyWordCount">--</strong>
+                <strong id="agencyWordCount" class="highlight-green">--</strong>
               </div>
               <div class="card stat">
                 <span>Churn rate</span>
-                <strong id="agencyChurn">--</strong>
+                <strong id="agencyChurn" class="highlight-green">--</strong>
               </div>
               <div class="card stat">
                 <span>Readability</span>
-                <strong id="agencyReadability">--</strong>
+                <strong id="agencyReadability" class="highlight-green">--</strong>
               </div>
               <div class="card stat">
                 <span>Words per chapter</span>
-                <strong id="agencyWordsPerChapter">--</strong>
+                <strong id="agencyWordsPerChapter" class="highlight-green">--</strong>
               </div>
             </div>
           </div>
@@ -430,7 +526,7 @@
           </div>
           <div class="controls">
             <input id="reviewSearch" placeholder="Search agency name" />
-            <select id="reviewMetricSelect">
+            <select id="reviewMetricSelect" class="pill-filter">
               <option value="word_count">Word count</option>
               <option value="churn">Churn rate</option>
               <option value="readability">Readability</option>
