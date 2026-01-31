@@ -62,9 +62,34 @@ CREATE TABLE IF NOT EXISTS agency_metrics (
   UNIQUE(agency_slug, issue_date, metric),
   FOREIGN KEY(agency_slug) REFERENCES agencies(slug)
 );
+
+CREATE TABLE IF NOT EXISTS app_state (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `
 	_, err := s.db.Exec(ddl)
 	return err
+}
+
+func (s *Store) SetState(ctx context.Context, key, value string) error {
+	now := time.Now().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO app_state(key, value, updated_at)
+VALUES(?,?,?)
+ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+`, key, value, now)
+	return err
+}
+
+func (s *Store) GetState(ctx context.Context, key string) (string, error) {
+	var value string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM app_state WHERE key=?`, key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return value, err
 }
 
 func (s *Store) UpsertAgencies(ctx context.Context, agencies []ecfr.Agency) error {
@@ -125,12 +150,22 @@ ON CONFLICT(number) DO UPDATE SET name=excluded.name, up_to_date_as_of=excluded.
 }
 
 func (s *Store) SnapshotExists(ctx context.Context, title int, date string) (bool, error) {
-	var x int
-	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM snapshots WHERE title_number=? AND issue_date=? LIMIT 1`, title, date).Scan(&x)
+	var path string
+	err := s.db.QueryRowContext(ctx, `SELECT file_path FROM snapshots WHERE title_number=? AND issue_date=? LIMIT 1`, title, date).Scan(&path)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
-	return err == nil, err
+	if err != nil {
+		return false, err
+	}
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			_, _ = s.db.ExecContext(ctx, `DELETE FROM snapshots WHERE title_number=? AND issue_date=?`, title, date)
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *Store) SaveSnapshot(ctx context.Context, title int, date string, xmlBytes []byte) error {

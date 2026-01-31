@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -105,7 +106,7 @@ func (c *Client) getJSON(ctx context.Context, u string, out any) error {
 }
 
 func (c *Client) do(req *http.Request) (*http.Response, error) {
-	const maxAttempts = 3
+	const maxAttempts = 5
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		r := req.Clone(req.Context())
@@ -115,6 +116,12 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 				_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 32*1024))
 				_ = res.Body.Close()
 				lastErr = fmt.Errorf("GET %s: status=%d", r.URL.String(), res.StatusCode)
+				if attempt < maxAttempts-1 {
+					if err := sleepWithRetryAfter(req.Context(), res, attempt); err != nil {
+						return nil, err
+					}
+					continue
+				}
 			} else {
 				return res, nil
 			}
@@ -122,15 +129,55 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 			lastErr = err
 		}
 		if attempt < maxAttempts-1 {
-			delay := time.Duration(250*(1<<attempt)) * time.Millisecond
-			t := time.NewTimer(delay)
-			select {
-			case <-req.Context().Done():
-				t.Stop()
-				return nil, req.Context().Err()
-			case <-t.C:
+			delay := time.Duration(500*(1<<attempt)) * time.Millisecond
+			jitter := time.Duration(time.Now().UnixNano()%200) * time.Millisecond
+			sleep := delay + jitter
+			if err := sleepWithContext(req.Context(), sleep); err != nil {
+				return nil, err
 			}
 		}
 	}
 	return nil, lastErr
+}
+
+func sleepWithRetryAfter(ctx context.Context, res *http.Response, attempt int) error {
+	if res.StatusCode == 429 {
+		if ra := res.Header.Get("Retry-After"); ra != "" {
+			if secs, err := strconv.Atoi(ra); err == nil {
+				return sleepWithContext(ctx, time.Duration(secs)*time.Second)
+			}
+			if t, err := time.Parse(time.RFC1123, ra); err == nil {
+				d := time.Until(t)
+				if d < 0 {
+					d = 0
+				}
+				return sleepWithContext(ctx, d)
+			}
+			if t, err := time.Parse(time.RFC1123Z, ra); err == nil {
+				d := time.Until(t)
+				if d < 0 {
+					d = 0
+				}
+				return sleepWithContext(ctx, d)
+			}
+		}
+	}
+	delay := time.Duration(700*(1<<attempt)) * time.Millisecond
+	jitter := time.Duration(time.Now().UnixNano()%250) * time.Millisecond
+	sleep := delay + jitter
+	if sleep > 12*time.Second {
+		sleep = 12 * time.Second
+	}
+	return sleepWithContext(ctx, sleep)
+}
+
+func sleepWithContext(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
 }

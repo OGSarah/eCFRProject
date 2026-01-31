@@ -43,6 +43,20 @@ function fmtScore(value) {
   return value.toFixed(1);
 }
 
+function fmtDateTime(value) {
+  if (!value) return "--";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return String(value);
+  return dt.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 function formatValue(metric, value) {
   switch (metric) {
     case "word_count":
@@ -120,6 +134,11 @@ async function updateSummary() {
   setText("statChurn", fmtPercent(avgMetric(churnRows)));
   setText("statWordsPerChapter", fmtNumber(avgMetric(wpcRows)));
   setText("statCoverage", numberFmt.format(wcRows.length));
+}
+
+async function loadStatus() {
+  const status = await jget("/api/status");
+  setText("lastRefresh", fmtDateTime(status.last_refresh));
 }
 
 async function renderFocusPills() {
@@ -309,6 +328,7 @@ async function refresh() {
     await loadTimeseries();
     await loadReviewTable();
 
+    setText("lastRefresh", fmtDateTime(r.last_refresh || r.computed_at));
     setText("refreshOut", `Updated ${r.computed_at} • ${r.downloaded} new snapshots`);
     setText("refreshState", "Refresh complete");
   } catch (e) {
@@ -392,6 +412,7 @@ document.getElementById("daysSelect").addEventListener("change", loadTimeseries)
   await loadAgencies();
   await loadAllLatest();
   await updateSummary();
+  await loadStatus();
   await renderFocusPills();
   await renderTopChart();
   await loadReviewTable();

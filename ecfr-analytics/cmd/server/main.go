@@ -4,11 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,7 +43,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	cli := ecfr.NewClient(baseURL, 25*time.Second)
+	cli := ecfr.NewClient(baseURL, 120*time.Second)
 
 	// Static UI
 	mux := http.NewServeMux()
@@ -76,6 +79,18 @@ func main() {
 			return
 		}
 		writeJSON(w, http.StatusOK, ag)
+	})
+
+	// Status / metadata
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		lastRefresh, err := st.GetState(r.Context(), "last_refresh")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"last_refresh": lastRefresh,
+		})
 	})
 
 	// Latest metrics for all agencies
@@ -209,12 +224,12 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 		jobs = append(jobs, job{title: t.Number, date: date})
 	}
 
-	workers := getenvInt("ECFR_DOWNLOAD_CONCURRENCY", 4)
+	workers := getenvInt("ECFR_DOWNLOAD_CONCURRENCY", 2)
 	if workers < 1 {
 		workers = 1
 	}
-	if workers > 16 {
-		workers = 16
+	if workers > 8 {
+		workers = 8
 	}
 
 	jobCh := make(chan job)
@@ -229,26 +244,40 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 				if ctx.Err() != nil {
 					return
 				}
-				rc, err := cli.GetFullTitleXMLStream(ctx, j.date, j.title)
-				if err != nil {
+				var lastErr error
+				for attempt := 0; attempt < 3; attempt++ {
+					rc, err := cli.GetFullTitleXMLStream(ctx, j.date, j.title)
+					if err == nil {
+						err = st.SaveSnapshotFromReader(ctx, j.title, j.date, rc)
+						_ = rc.Close()
+					}
+					if err == nil {
+						atomic.AddInt64(&downloaded, 1)
+						lastErr = nil
+						break
+					}
+					lastErr = err
+					if !isRetryableDownloadErr(err) || attempt == 2 {
+						break
+					}
+					delay := time.Duration(2<<attempt) * time.Second
+					jitter := time.Duration(time.Now().UnixNano()%500) * time.Millisecond
+					t := time.NewTimer(delay + jitter)
 					select {
-					case errCh <- err:
+					case <-ctx.Done():
+						t.Stop()
+						return
+					case <-t.C:
+					}
+				}
+				if lastErr != nil {
+					select {
+					case errCh <- lastErr:
 					default:
 					}
 					cancel()
 					return
 				}
-				err = st.SaveSnapshotFromReader(ctx, j.title, j.date, rc)
-				_ = rc.Close()
-				if err != nil {
-					select {
-					case errCh <- err:
-					default:
-					}
-					cancel()
-					return
-				}
-				atomic.AddInt64(&downloaded, 1)
 			}
 		}()
 	}
@@ -273,11 +302,17 @@ sendLoop:
 		return nil, err
 	}
 
+	computedAt := time.Now().Format(time.RFC3339)
+	if err := st.SetState(ctx, "last_refresh", computedAt); err != nil {
+		return nil, err
+	}
+
 	return map[string]any{
 		"agencies":    len(agencies),
 		"titles":      len(titles),
 		"downloaded":  int(atomic.LoadInt64(&downloaded)),
-		"computed_at": time.Now().Format(time.RFC3339),
+		"computed_at": computedAt,
+		"last_refresh": computedAt,
 	}, nil
 }
 
@@ -334,6 +369,23 @@ func split2(s, sep string) []string {
 		}
 	}
 	return out
+}
+
+func isRetryableDownloadErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	if ne, ok := err.(net.Error); ok && ne.Timeout() {
+		return true
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "context deadline exceeded") || strings.Contains(msg, "Client.Timeout") {
+		return true
+	}
+	return false
 }
 
 func indexOf(s, sub string) int {

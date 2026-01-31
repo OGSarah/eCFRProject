@@ -91,6 +91,7 @@
         font-weight: 600;
         margin-top: -100px;
         margin-bottom: 20px;
+        padding-top: 18px;
       }
 
       h1, h2, h3 {
@@ -294,9 +295,10 @@
             regulatory footprint, change, and complexity in one place.
           </p>
           <div class="controls">
-            <button class="btn" id="refreshBtn">Refresh eCFR snapshots</button>
+            <button class="btn" id="refreshBtn">Download eCFR snapshots</button>
             <button class="btn btn-secondary" id="exportCsvBtn">Export CSV</button>
           </div>
+          <div class="subtle">Last refresh: <span id="lastRefresh">--</span></div>
           <div class="subtle" id="refreshOut"></div>
         </div>
         <div class="grid grid-2">
