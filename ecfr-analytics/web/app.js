@@ -1,16 +1,6 @@
 const API = (path) => path;
 
-const metricLabels = {
-  word_count: "Word count",
-  churn: "Churn rate",
-  readability: "Readability",
-  words_per_chapter: "Words per chapter",
-  checksum: "Checksum",
-};
-
 const metricsCache = new Map();
-let topChart = null;
-let tsChart = null;
 
 const numberFmt = new Intl.NumberFormat("en-US");
 const themeKey = "ecfr-theme";
@@ -41,20 +31,6 @@ function fmtPercent(value) {
 function fmtScore(value) {
   if (typeof value !== "number") return "--";
   return value.toFixed(1);
-}
-
-function fmtDateTime(value) {
-  if (!value) return "--";
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return String(value);
-  return dt.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
 }
 
 function formatValue(metric, value) {
@@ -96,14 +72,6 @@ async function loadAllLatest() {
 
 async function loadAgencies() {
   const agencies = await jget("/api/agencies");
-  const sel = document.getElementById("agencySelect");
-  sel.innerHTML = "";
-  for (const a of agencies) {
-    const opt = document.createElement("option");
-    opt.value = a.slug;
-    opt.textContent = a.name;
-    sel.appendChild(opt);
-  }
   setText("statAgencies", numberFmt.format(agencies.length));
 }
 
@@ -122,28 +90,11 @@ function latestDate(rows) {
   return dates.length ? dates[dates.length - 1] : "--";
 }
 
-function formatHistoryStatus(status) {
-  if (!status) return "Historical metrics: --";
-  const offsets = String(status.history_offsets || "")
-    .split(",")
-    .map((v) => v.trim())
-    .filter(Boolean);
-  if (!offsets.length) return "Historical metrics: not available yet";
-  const offsetsLabel = offsets.join("/");
-  const asOf = status.history_last_refresh ? ` (as of ${fmtDateTime(status.history_last_refresh)})` : "";
-  return `Historical metrics: ${offsetsLabel} days available${asOf}`;
-}
-
 async function updateSummary() {
   const wcRows = await loadLatest("word_count");
   const churnRows = await loadLatest("churn");
   const readRows = await loadLatest("readability");
   const wpcRows = await loadLatest("words_per_chapter");
-  let status = null;
-  try {
-    status = await jget("/api/status");
-  } catch (e) {
-  }
 
   setText("statTotalWords", fmtNumber(sumMetric(wcRows)));
   setText("statReadability", fmtScore(avgMetric(readRows)));
@@ -151,7 +102,6 @@ async function updateSummary() {
   setText("statChurn", fmtPercent(avgMetric(churnRows)));
   setText("statWordsPerChapter", fmtNumber(avgMetric(wpcRows)));
   setText("statCoverage", numberFmt.format(wcRows.length));
-  setText("historyStatus", formatHistoryStatus(status));
 }
 
 function topN(rows, n = 12) {
@@ -166,85 +116,6 @@ function bottomN(rows, n = 5) {
     .filter((r) => typeof r.value === "number")
     .sort((a, b) => a.value - b.value)
     .slice(0, n);
-}
-
-function minDate(rows) {
-  const dates = rows.map((r) => r.date).filter(Boolean).sort();
-  return dates.length ? dates[0] : "--";
-}
-
-function maxDate(rows) {
-  const dates = rows.map((r) => r.date).filter(Boolean).sort();
-  return dates.length ? dates[dates.length - 1] : "--";
-}
-
-function chartColor(metric) {
-  switch (metric) {
-    case "churn":
-      return "#f1b24a";
-    case "readability":
-      return "#3d9a7b";
-    case "words_per_chapter":
-      return "#1c6e8c";
-    default:
-      return cssVar("--ink") || "#0f1b2d";
-  }
-}
-
-function cssVar(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-function chartGridColor() {
-  return cssVar("--chart-grid") || "rgba(15, 27, 45, 0.08)";
-}
-
-function chartFill() {
-  return cssVar("--chart-fill") || "rgba(28, 110, 140, 0.15)";
-}
-
-async function renderTopChart() {
-  const metric = document.getElementById("topMetricSelect").value;
-  const rows = await loadLatest(metric);
-  const top = topN(rows, 12);
-  const gridColor = chartGridColor();
-
-  setText("topChartTitle", `Top agencies by ${metricLabels[metric] ?? metric}`);
-
-  const cfg = {
-    type: "bar",
-    data: {
-      labels: top.map((r) => r.name),
-      datasets: [{
-        label: metricLabels[metric] ?? metric,
-        data: top.map((r) => r.value),
-        backgroundColor: chartColor(metric),
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        y: {
-          grid: { color: gridColor },
-          ticks: {
-            callback: (val) => {
-              if (metric === "churn") return `${(val * 100).toFixed(0)}%`;
-              return numberFmt.format(val);
-            },
-          },
-        },
-        x: {
-          grid: { color: gridColor },
-          ticks: { autoSkip: false, maxRotation: 40, minRotation: 20 },
-        },
-      },
-    },
-  };
-
-  if (topChart) topChart.destroy();
-  topChart = new Chart(document.getElementById("topChart"), cfg);
 }
 
 function renderInsightList(el, rows, fmt) {
@@ -279,70 +150,6 @@ async function renderInsights() {
   }
 }
 
-async function renderGrowthHotspots() {
-  const list = document.getElementById("growthHotspots");
-  if (!list) return;
-  const rows = await jget("/api/insights/growth?days=365");
-  const display = rows.map((r) => ({ name: r.agency, value: r.delta }));
-  renderInsightList(list, display, fmtNumber);
-}
-
-async function loadTimeseries() {
-  const slug = document.getElementById("agencySelect").value;
-  if (!slug) return;
-
-  const metric = document.getElementById("metricSelect").value;
-  const days = document.getElementById("daysSelect").value;
-
-  const rows = await jget(
-    `/api/metrics/agency/${encodeURIComponent(slug)}/timeseries?metric=${encodeURIComponent(metric)}&days=${encodeURIComponent(days)}`
-  );
-  const data = [...rows].reverse();
-  const gridColor = chartGridColor();
-
-  const cfg = {
-    type: "line",
-    data: {
-      labels: data.map((r) => r.date),
-      datasets: [{
-        label: metricLabels[metric] ?? metric,
-        data: data.map((r) => r.value),
-        borderColor: chartColor(metric),
-        backgroundColor: chartFill(),
-        fill: true,
-        tension: 0.3,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: true } },
-      scales: {
-        y: { grid: { color: gridColor } },
-        x: { grid: { color: gridColor } },
-      },
-    },
-  };
-
-  if (tsChart) tsChart.destroy();
-  tsChart = new Chart(document.getElementById("tsChart"), cfg);
-
-  setText("agencyMeta", `slug: ${slug} • points: ${data.length}`);
-  updateAgencyCards(slug);
-}
-
-function findMetricValue(metric, slug) {
-  const rows = metricsCache.get(metric) || [];
-  const row = rows.find((r) => r.slug === slug);
-  return row ? row.value : null;
-}
-
-function updateAgencyCards(slug) {
-  setText("agencyWordCount", formatValue("word_count", findMetricValue("word_count", slug)));
-  setText("agencyChurn", formatValue("churn", findMetricValue("churn", slug)));
-  setText("agencyReadability", formatValue("readability", findMetricValue("readability", slug)));
-  setText("agencyWordsPerChapter", formatValue("words_per_chapter", findMetricValue("words_per_chapter", slug)));
-}
 
 async function loadReviewTable() {
   const metric = document.getElementById("reviewMetricSelect").value;
@@ -382,35 +189,10 @@ async function refresh() {
     await loadAllLatest();
     await updateSummary();
     await renderInsights();
-    await renderGrowthHotspots();
-    await renderTopChart();
-    await loadTimeseries();
     await loadReviewTable();
 
   } catch (e) {
   }
-}
-
-function exportCsv() {
-  const metric = document.getElementById("reviewMetricSelect").value;
-  const rows = metricsCache.get(metric) || [];
-  const header = ["agency", "date", metric];
-  const lines = [header.join(",")];
-
-  for (const r of rows) {
-    const value = r.value == null ? "" : String(r.value).replaceAll("\"", "\"\"");
-    lines.push(`"${r.name}","${r.date}","${value}"`);
-  }
-
-  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `ecfr-${metric}-latest.csv`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
 }
 
 function escapeHtml(s) {
@@ -435,9 +217,6 @@ function applyTheme(theme) {
     toggle.setAttribute("aria-pressed", String(isDark));
   }
 
-  Chart.defaults.color = cssVar("--ink") || "#0f1b2d";
-  Chart.defaults.borderColor = chartGridColor();
-  Chart.defaults.font.family = '"IBM Plex Sans", "Helvetica Neue", Arial, sans-serif';
 }
 
 function loadThemePreference() {
@@ -446,10 +225,7 @@ function loadThemePreference() {
 
 function syncThemeFromSystem() {
   applyTheme(themeQuery.matches ? "dark" : "light");
-  renderTopChart();
-  loadTimeseries();
   renderInsights();
-  renderGrowthHotspots();
 }
 
 async function refreshFromServer() {
@@ -457,19 +233,11 @@ async function refreshFromServer() {
   await loadAllLatest();
   await updateSummary();
   await renderInsights();
-  await renderGrowthHotspots();
-  await renderTopChart();
   await loadReviewTable();
-  await loadTimeseries();
 }
 
-document.getElementById("exportCsvBtn").addEventListener("click", exportCsv);
-document.getElementById("topMetricSelect").addEventListener("change", renderTopChart);
 document.getElementById("reviewMetricSelect").addEventListener("change", loadReviewTable);
 document.getElementById("reviewSearch").addEventListener("input", loadReviewTable);
-document.getElementById("agencySelect").addEventListener("change", loadTimeseries);
-document.getElementById("metricSelect").addEventListener("change", loadTimeseries);
-document.getElementById("daysSelect").addEventListener("change", loadTimeseries);
 
 (async function init() {
   localStorage.removeItem(themeKey);

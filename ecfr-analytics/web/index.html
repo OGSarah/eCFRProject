@@ -193,15 +193,6 @@
         flex-wrap: wrap;
       }
 
-      .trendline-controls {
-        align-items: center;
-      }
-
-      .trendline-controls select {
-        flex: 1 1 160px;
-        min-width: 140px;
-      }
-
       select, input {
         padding: 10px 12px;
         border-radius: 10px;
@@ -368,7 +359,6 @@
             footprint, change, and complexity in one place.
           </p>
           <div class="controls">
-            <button class="btn btn-secondary" id="exportCsvBtn">Export CSV</button>
           </div>
         </div>
         <div class="grid grid-2">
@@ -440,83 +430,6 @@
         </div>
       </section>
 
-      <section class="section fade-in delay-2">
-        <div class="section-header">
-          <h2>Growth hotspots</h2>
-        </div>
-        <div class="grid grid-2">
-          <div class="card">
-            <ul class="insight-list" id="growthHotspots"></ul>
-          </div>
-        </div>
-        <div class="subtle" style="margin-top: 8px;">* Largest increases over the last 365 days.</div>
-      </section>
-
-      <section class="section fade-in delay-2">
-        <div class="section-header">
-          <h2>Top agencies (latest)</h2>
-          <div class="controls">
-            <select id="topMetricSelect" class="pill-filter">
-              <option value="word_count">Word count</option>
-              <option value="churn">Churn rate</option>
-              <option value="readability">Readability</option>
-              <option value="words_per_chapter">Words per chapter</option>
-            </select>
-          </div>
-        </div>
-        <div class="grid">
-          <div class="card chart-card">
-            <h3 id="topChartTitle">Top agencies by word count</h3>
-            <canvas id="topChart"></canvas>
-          </div>
-        </div>
-      </section>
-
-      <section class="section fade-in delay-2">
-        <div class="section-header">
-          <h2>Agency trendline</h2>
-        </div>
-        <div class="grid">
-          <div class="card chart-card">
-            <div class="controls trendline-controls">
-              <select id="agencySelect" class="pill-filter"></select>
-              <select id="metricSelect" class="pill-filter">
-                <option value="word_count">Word count</option>
-                <option value="churn">Churn rate</option>
-                <option value="readability">Readability</option>
-                <option value="words_per_chapter">Words per chapter</option>
-              </select>
-              <select id="daysSelect" class="pill-filter">
-                <option value="30">30 days</option>
-                <option value="180" selected>180 days</option>
-                <option value="365">365 days</option>
-              </select>
-            </div>
-            <canvas id="tsChart"></canvas>
-            <div class="subtle" id="agencyMeta"></div>
-            <div class="subtle" id="historyStatus"></div>
-            <div class="grid grid-2" style="margin-top: 12px;">
-              <div class="card stat">
-                <span>Word count</span>
-                <strong id="agencyWordCount" class="highlight-green">--</strong>
-              </div>
-              <div class="card stat">
-                <span>Churn rate</span>
-                <strong id="agencyChurn" class="highlight-green">--</strong>
-              </div>
-              <div class="card stat">
-                <span>Readability</span>
-                <strong id="agencyReadability" class="highlight-green">--</strong>
-              </div>
-              <div class="card stat">
-                <span>Words per chapter</span>
-                <strong id="agencyWordsPerChapter" class="highlight-green">--</strong>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <section class="section fade-in delay-3">
         <div class="section-header">
           <div>
@@ -553,7 +466,6 @@
       <div>Source: <a href="https://www.ecfr.gov/" target="_blank" rel="noopener">ecfr.gov</a></div>
     </footer>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

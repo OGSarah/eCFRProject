@@ -30,14 +30,6 @@ func ComputeLatest(ctx context.Context, st *store.Store) error {
 	return computeWithTitleDates(ctx, st, titles, titleDates)
 }
 
-func ComputeForTitleDates(ctx context.Context, st *store.Store, titleDates map[int]string) error {
-	titles, err := loadTitles(ctx, st)
-	if err != nil {
-		return err
-	}
-	return computeWithTitleDates(ctx, st, titles, titleDates)
-}
-
 func computeWithTitleDates(ctx context.Context, st *store.Store, titles []ecfr.Title, titleDates map[int]string) error {
 	agencies, err := loadAgencies(ctx, st)
 	if err != nil {

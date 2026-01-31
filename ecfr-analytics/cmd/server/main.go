@@ -97,47 +97,6 @@ func main() {
 		writeJSON(w, http.StatusOK, ag)
 	})
 
-	// Insights: growth hotspots for a window.
-	mux.HandleFunc("/api/insights/growth", func(w http.ResponseWriter, r *http.Request) {
-		days := 365
-		if v := r.URL.Query().Get("days"); v != "" {
-			if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 3650 {
-				days = n
-			}
-		}
-		out, err := metrics.GrowthHotspots(r.Context(), st, days, 5)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		writeJSON(w, http.StatusOK, out)
-	})
-
-	// Status / metadata
-	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
-		// Expose refresh time and any available historical metric windows.
-		lastRefresh, err := st.GetState(r.Context(), "last_refresh")
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		historyOffsets, err := st.GetState(r.Context(), "history_offsets")
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		historyUpdatedAt, err := st.GetState(r.Context(), "history_last_refresh")
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"last_refresh":         lastRefresh,
-			"history_offsets":      historyOffsets,
-			"history_last_refresh": historyUpdatedAt,
-		})
-	})
-
 	// Latest metrics for all agencies
 	// /api/metrics/latest?metric=word_count|words_per_chapter|checksum|churn|readability
 	mux.HandleFunc("/api/metrics/latest", func(w http.ResponseWriter, r *http.Request) {
@@ -151,49 +110,6 @@ func main() {
 			return
 		}
 		writeJSON(w, http.StatusOK, rows)
-	})
-
-	// Timeseries per agency
-	// /api/metrics/agency/{slug}/timeseries?metric=word_count|words_per_chapter|churn|readability&days=180
-	mux.HandleFunc("/api/metrics/agency/", func(w http.ResponseWriter, r *http.Request) {
-		// naive router
-		path := r.URL.Path
-		// /api/metrics/agency/{slug}/timeseries
-		const prefix = "/api/metrics/agency/"
-		if len(path) <= len(prefix) {
-			http.NotFound(w, r)
-			return
-		}
-		rest := path[len(prefix):]
-		// rest = "{slug}/timeseries"
-		parts := split2(rest, "/")
-		if len(parts) != 2 {
-			http.NotFound(w, r)
-			return
-		}
-		slug := parts[0]
-		action := parts[1]
-		switch action {
-		case "timeseries":
-			metric := r.URL.Query().Get("metric")
-			if metric == "" {
-				metric = "word_count"
-			}
-			days := 180
-			if v := r.URL.Query().Get("days"); v != "" {
-				if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 3650 {
-					days = n
-				}
-			}
-			out, err := st.AgencyMetricSeries(r.Context(), slug, metric, days)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			writeJSON(w, http.StatusOK, out)
-		default:
-			http.NotFound(w, r)
-		}
 	})
 
 	log.Printf("Server started")
@@ -257,7 +173,6 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 		date  string
 	}
 	jobs := make([]job, 0, len(titles))
-	historyOffsets := []int{30, 180, 365}
 	for _, t := range titles {
 		if t.Reserved {
 			continue
@@ -269,19 +184,6 @@ func refreshCurrent(ctx context.Context, cli *ecfr.Client, st *store.Store) (map
 		}
 		if !exists {
 			jobs = append(jobs, job{title: t.Number, date: date})
-		}
-
-		// Backfill: download snapshots for multiple historical offsets.
-		for _, offset := range historyOffsets {
-			if prior := dateMinusDays(date, offset); prior != "" {
-				existsPrior, err := st.SnapshotExists(ctx, t.Number, prior)
-				if err != nil {
-					return nil, err
-				}
-				if !existsPrior {
-					jobs = append(jobs, job{title: t.Number, date: prior})
-				}
-			}
 		}
 	}
 
@@ -360,45 +262,9 @@ sendLoop:
 	if err := metrics.ComputeLatest(ctx, st); err != nil {
 		return nil, err
 	}
-	// 5) Compute metrics for the backfilled snapshots (30/180/365 days prior), if present.
-	availableOffsets := make([]int, 0, len(historyOffsets))
-	for _, offset := range historyOffsets {
-		// Build a per-title date map for this historical window.
-		priorDates := map[int]string{}
-		for _, t := range titles {
-			if t.Reserved {
-				continue
-			}
-			prior := dateMinusDays(t.UpToDateAsOf, offset)
-			if prior == "" {
-				continue
-			}
-			exists, err := st.SnapshotExists(ctx, t.Number, prior)
-			if err != nil {
-				return nil, err
-			}
-			if exists {
-				priorDates[t.Number] = prior
-			}
-		}
-		if len(priorDates) == 0 {
-			continue
-		}
-		if err := metrics.ComputeForTitleDates(ctx, st, priorDates); err != nil {
-			return nil, err
-		}
-		availableOffsets = append(availableOffsets, offset)
-	}
 
 	computedAt := time.Now().Format(time.RFC3339)
 	if err := st.SetState(ctx, "last_refresh", computedAt); err != nil {
-		return nil, err
-	}
-	// Track which historical windows were actually computed for UI visibility.
-	if err := st.SetState(ctx, "history_last_refresh", computedAt); err != nil {
-		return nil, err
-	}
-	if err := st.SetState(ctx, "history_offsets", joinInts(availableOffsets, ",")); err != nil {
 		return nil, err
 	}
 
@@ -450,27 +316,6 @@ func withCORS(next http.Handler) http.Handler {
 	})
 }
 
-// split2 splits into at most two parts by the first separator.
-func split2(s, sep string) []string {
-	var out []string
-	i := 0
-	for {
-		j := indexOf(s[i:], sep)
-		if j < 0 {
-			out = append(out, s[i:])
-			break
-		}
-		j += i
-		out = append(out, s[i:j])
-		i = j + len(sep)
-		if i >= len(s) {
-			out = append(out, "")
-			break
-		}
-	}
-	return out
-}
-
 // isRetryableDownloadErr identifies transient download errors worth retrying.
 func isRetryableDownloadErr(err error) bool {
 	if err == nil {
@@ -487,34 +332,4 @@ func isRetryableDownloadErr(err error) bool {
 		return true
 	}
 	return false
-}
-
-func dateMinusDays(ymd string, days int) string {
-	t, err := time.Parse("2006-01-02", ymd)
-	if err != nil {
-		return ""
-	}
-	return t.AddDate(0, 0, -days).Format("2006-01-02")
-}
-
-func indexOf(s, sub string) int {
-	// tiny helper to avoid importing strings everywhere
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return i
-		}
-	}
-	return -1
-}
-
-// joinInts formats a list of integers into a separator-delimited string.
-func joinInts(values []int, sep string) string {
-	if len(values) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(values))
-	for _, v := range values {
-		parts = append(parts, strconv.Itoa(v))
-	}
-	return strings.Join(parts, sep)
 }
