@@ -39,8 +39,6 @@ go run ./cmd/server
 
 `http://localhost:8080`
 
-Then click on "Download eCFR snapshots"
-
 ### Important features I added:
 - Dark mode/Light mode is set on the website according to system settings.
 - Tested on Chrome, Safari, Firefox, add more
