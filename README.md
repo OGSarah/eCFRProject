@@ -43,3 +43,4 @@ Then click on "Download current snapshots + recompute metrics""
 
 ### Important features I added:
 - Dark mode/Light mode is set on the website according to system settings.
+- Tested on Chrome, Safari, Firefox, add more
