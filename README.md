@@ -2,7 +2,7 @@
 
 ## Purpose
 The United States Federal Government has over 200,000 pages of federal regulations across ~150 main agencies, all of which can be found within the eCFR at https://www.ecfr.gov/. There is a public API for it.
-The goal of this project is to create a simple website to analyze Federal Regulations to allow for more digestible and actionable insights to be made on potential deregulation efforts across the government.
+The goal of this project is to create a website to analyze Federal Regulations to allow for more digestible and actionable insights to be made on potential deregulation efforts across the government.
 
 ## What This Project Implements
 - Data ingestion from the eCFR API and storage in a local SQLite database and gzip-compressed XML snapshots.
