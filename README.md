@@ -44,3 +44,7 @@ By default it listens on `http://localhost:8080`.
 | Dark Mode | Light Mode |
 |----------|------------|
 | <img src="screenshots/darkMode.png" width="450"/> | <img src="screenshots/lightMode.png" width="450"/> |
+
+## License
+
+Released under the [MIT License](LICENSE). © 2026 SarahUniverse
